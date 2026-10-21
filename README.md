@@ -50,8 +50,15 @@ certflow/power/                   application layer: AC power flow
 examples/          WSCC-9 MaskablePPO case studies (wscc9_env.py, wscc9_actor_reachability.py) + reference outputs
 wscc9_maskableppo_policy_extraction/   the trained agent: actor weights (.npz), the SB3 'data' file, the grid (WSCC_9_bus.raw)
 tests/             soundness-by-sampling and end-to-end tests
+docs/              the method (paper -> code map) and one document per verification mode
 shell/scripts/     LSF job scripts (setup, tests, case studies); logs go to shell/outputs/
 ```
+
+## Documentation
+
+- [docs/method.md](docs/method.md): the method of the paper, step by step, with the function that implements each step
+- [docs/rl_reachability.md](docs/rl_reachability.md): reachability of the RL agent over load uncertainty (one-step, N-1, two-step)
+- [docs/measurement_noise.md](docs/measurement_noise.md): robustness radius to measurement noise
 
 ## Install
 
