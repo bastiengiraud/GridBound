@@ -1,0 +1,119 @@
+Sequential(Linear(26->64), Tanh(), Linear(64->64), Tanh(), Linear(64->73); deploy_u=2^-24)
+
+=== reset (delta = 0):  lines (1, 1, 1, 1, 1, 1)  Pg2/3 = (163.0, 85.0) MW  V2/3 = (1.025, 1.025)  delta = [0. 0. 0.] +- 0.02  (next-step margin +-0.0)
+  pre-action PF certified (rho 0.019); observation ranges: slack 65.9..77.3 MW, load P5 122.7..127.3 MW, max line loading 34.5%, max trafo 54.5%
+  partition: 1 boxes (complete=True); reachable actions over the box: ['Pg2-40MW']
+     100.00%  Pg2-40MW
+  one-step safety, N-0 enforced: unique PF, no overload, slack in [0, 250] MW; N-1 reported only: SAFE 100.0%  CAN-VIOLATE 0.0%  UNDECIDED 0.0%  PF-UNKNOWN 0.0%   (share of the load box)
+  N-1 of the agent's actions: secure on 100.0%, uncertain on 0.0%, insecure on 0.0% of the box
+     after Pg2-40MW:
+         N-0: OK          max loading 41.2%, slack 106.2..117.6 MW   (certified for every load in the box)
+         N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 51%)
+  Monte-Carlo (100 samples, float32 actor): observation inside certified range 100/100, chosen action in certified set 100/100, post-action inside certified band 100/100
+  time 0.5s
+
+=== last training state:  lines (1, 1, 1, 1, 1, 1)  Pg2/3 = (123.0, 85.0) MW  V2/3 = (1.025, 1.025)  delta = [0.008 0.002 0.004] +- 0.02  (next-step margin +-0.0)
+  pre-action PF certified (rho 0.019); observation ranges: slack 107.6..119.0 MW, load P5 124.6..129.2 MW, max line loading 32.3%, max trafo 41.2%
+  partition: 1 boxes (complete=True); reachable actions over the box: ['Pg3-5MW']
+     100.00%  Pg3-5MW
+  one-step safety, N-0 enforced: unique PF, no overload, slack in [0, 250] MW; N-1 reported only: SAFE 100.0%  CAN-VIOLATE 0.0%  UNDECIDED 0.0%  PF-UNKNOWN 0.0%   (share of the load box)
+  N-1 of the agent's actions: secure on 100.0%, uncertain on 0.0%, insecure on 0.0% of the box
+     after Pg3-5MW:
+         N-0: OK          max loading 42.4%, slack 112.6..124.0 MW   (certified for every load in the box)
+         N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 52%)
+  Monte-Carlo (100 samples, float32 actor): observation inside certified range 100/100, chosen action in certified set 100/100, post-action inside certified band 100/100
+  time 0.5s
+
+=== heavy load (delta = +0.3):  lines (1, 1, 1, 1, 1, 1)  Pg2/3 = (163.0, 85.0) MW  V2/3 = (1.025, 1.025)  delta = [0.3 0.3 0.3] +- 0.02  (next-step margin +-0.0)
+  pre-action PF certified (rho 0.018); observation ranges: slack 148.3..158.8 MW, load P5 154.5..158.8 MW, max line loading 40.7%, max trafo 55.7%
+  partition: 1 boxes (complete=True); reachable actions over the box: ['Pg3-5MW']
+     100.00%  Pg3-5MW
+  one-step safety, N-0 enforced: unique PF, no overload, slack in [0, 250] MW; N-1 reported only: SAFE 100.0%  CAN-VIOLATE 0.0%  UNDECIDED 0.0%  PF-UNKNOWN 0.0%   (share of the load box)
+  N-1 of the agent's actions: secure on 100.0%, uncertain on 0.0%, insecure on 0.0% of the box
+     after Pg3-5MW:
+         N-0: OK          max loading 57.3%, slack 153.3..163.8 MW   (certified for every load in the box)
+         N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 65%)
+  Monte-Carlo (100 samples, float32 actor): observation inside certified range 100/100, chosen action in certified set 100/100, post-action inside certified band 100/100
+  time 0.5s
+
+=== light load (delta = -0.3):  lines (1, 1, 1, 1, 1, 1)  Pg2/3 = (163.0, 85.0) MW  V2/3 = (1.025, 1.025)  delta = [-0.3 -0.3 -0.3] +- 0.02  (next-step margin +-0.0)
+  pre-action PF certified (rho 0.020); observation ranges: slack -22.1..-10.0 MW, load P5 87.6..92.5 MW, max line loading 41.2%, max trafo 55.0%
+  partition: 1 boxes (complete=True); reachable actions over the box: ['Pg2-45MW']
+     100.00%  Pg2-45MW
+  one-step safety, N-0 enforced: unique PF, no overload, slack in [0, 250] MW; N-1 reported only: SAFE 100.0%  CAN-VIOLATE 0.0%  UNDECIDED 0.0%  PF-UNKNOWN 0.0%   (share of the load box)
+  N-1 of the agent's actions: secure on 100.0%, uncertain on 0.0%, insecure on 0.0% of the box
+     after Pg2-45MW:
+         N-0: OK          max loading 40.2%, slack 22.7..34.8 MW   (certified for every load in the box)
+         N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 54%)
+  Monte-Carlo (100 samples, float32 actor): observation inside certified range 100/100, chosen action in certified set 100/100, post-action inside certified band 100/100
+  time 0.5s
+
+=== line 8-9 open:  lines (1, 1, 1, 1, 1, 0)  Pg2/3 = (163.0, 85.0) MW  V2/3 = (1.025, 1.025)  delta = [0. 0. 0.] +- 0.02  (next-step margin +-0.0)
+  pre-action PF certified (rho 0.022); observation ranges: slack 59.7..70.6 MW, load P5 121.5..126.1 MW, max line loading 41.0%, max trafo 55.2%
+  partition: 1 boxes (complete=True); reachable actions over the box: ['Pg2-40MW']
+     100.00%  Pg2-40MW
+  one-step safety, N-0 enforced: unique PF, no overload, slack in [0, 250] MW; N-1 reported only: SAFE 100.0%  CAN-VIOLATE 0.0%  UNDECIDED 0.0%  PF-UNKNOWN 0.0%   (share of the load box)
+  N-1 of the agent's actions: secure on 0.0%, uncertain on 0.0%, insecure on 100.0% of the box
+     after Pg2-40MW:
+         N-0: OK          max loading 42.3%, slack 100.0..110.9 MW   (certified for every load in the box)
+         N-1: INSECURE    count 15 for every load: 5 of 5 line outages split the grid (PF fails, 3 points each)
+  N-1-secure alternatives the agent never takes here (N-0 safe and N-1 count 0 for every load):
+     close 8-9 (max loading 55%)
+  Monte-Carlo (100 samples, float32 actor): observation inside certified range 100/100, chosen action in certified set 100/100, post-action inside certified band 100/100
+  time 1.4s
+
+=== after +0.5 jump at bus 8:  lines (1, 1, 1, 1, 1, 1)  Pg2/3 = (163.0, 85.0) MW  V2/3 = (1.025, 1.025)  delta = [0.  0.  0.5] +- 0.02  (next-step margin +-0.0)
+  pre-action PF certified (rho 0.018); observation ranges: slack 111.0..122.0 MW, load P5 122.8..127.3 MW, max line loading 43.0%, max trafo 54.6%
+  partition: 19 boxes (complete=True); reachable actions over the box: ['Pg2-45MW', 'Pg2-40MW']
+      71.88%  Pg2-45MW
+      28.12%  Pg2-45MW | Pg2-40MW
+  one-step safety, N-0 enforced: unique PF, no overload, slack in [0, 250] MW; N-1 reported only: SAFE 100.0%  CAN-VIOLATE 0.0%  UNDECIDED 0.0%  PF-UNKNOWN 0.0%   (share of the load box)
+  N-1 of the agent's actions: secure on 100.0%, uncertain on 0.0%, insecure on 0.0% of the box
+     after Pg2-45MW:
+         N-0: OK          max loading 56.7%, slack 156.1..167.1 MW   (certified for every load in the box)
+         N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 63%)
+     after Pg2-40MW:
+         N-0: OK          max loading 55.0%, slack 154.6..162.1 MW   (certified for every load in the box)
+         N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 61%)
+  Monte-Carlo (100 samples, float32 actor): observation inside certified range 100/100, chosen action in certified set 100/100, post-action inside certified band 100/100
+  time 8.8s
+
+=== TWO-STEP reachability from reset (delta = 0): delta = [0. 0. 0.] +- 0.02, load change +-0.0 per step
+  step 1: actions ['Pg2-40MW']  (safety 100.0% SAFE)
+       after Pg2-40MW:
+           N-0: OK          max loading 41.2%, slack 106.2..117.6 MW   (certified for every load in the box)
+           N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 51%)
+  after Pg2-40MW -> Pg2/3 = (123.0, 85.0) MW, V2/3 = (1.025, 1.025); step-2 load box delta in [[-0.02 -0.02 -0.02], [0.02 0.02 0.02]]
+       100.00%  Pg3-5MW
+       after Pg3-5MW:
+           N-0: OK          max loading 41.9%, slack 111.2..122.6 MW   (certified for every load in the box)
+           N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 51%)
+  certified reachable 2-action sequences (1): ['Pg2-40MW -> Pg3-5MW']
+  TWO-STEP SAFE (N-0 enforced: unique PF, no overload, slack in [0, 250] MW; N-1 reported only): True   (every reachable sequence)
+  N-1 over the tree (reported only): certified N-1 secure along every reachable sequence
+  Monte-Carlo (100 random 2-step trajectories, float32 agent): sequence in certified set 100/100, step-2 post-action state inside certified band 100/100
+  time 0.8s
+
+=== TWO-STEP reachability from after +0.5 jump at bus 8: delta = [0.  0.  0.5] +- 0.02, load change +-0.0 per step
+  step 1: actions ['Pg2-45MW', 'Pg2-40MW']  (safety 100.0% SAFE)
+       after Pg2-45MW:
+           N-0: OK          max loading 56.7%, slack 156.1..167.1 MW   (certified for every load in the box)
+           N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 63%)
+       after Pg2-40MW:
+           N-0: OK          max loading 55.0%, slack 154.6..162.1 MW   (certified for every load in the box)
+           N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 61%)
+  after Pg2-45MW -> Pg2/3 = (118.0, 85.0) MW, V2/3 = (1.025, 1.025); step-2 load box delta in [[-0.02 -0.02  0.48], [0.02 0.02 0.52]]
+       100.00%  Pg3-10MW
+       after Pg3-10MW:
+           N-0: OK          max loading 60.1%, slack 166.1..177.1 MW   (certified for every load in the box)
+           N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 67%)
+  after Pg2-40MW -> Pg2/3 = (123.0, 85.0) MW, V2/3 = (1.025, 1.025); step-2 load box delta in [[-0.01 -0.01  0.48], [0.02 0.02 0.52]]
+       100.00%  Pg3-10MW
+       after Pg3-10MW:
+           N-0: OK          max loading 58.4%, slack 163.0..172.1 MW   (certified for every load in the box)
+           N-1: SECURE      count 0 for every load: no line outage overloads anything (worst post-outage loading <= 65%)
+  certified reachable 2-action sequences (2): ['Pg2-45MW -> Pg3-10MW', 'Pg2-40MW -> Pg3-10MW']
+  TWO-STEP SAFE (N-0 enforced: unique PF, no overload, slack in [0, 250] MW; N-1 reported only): True   (every reachable sequence)
+  N-1 over the tree (reported only): certified N-1 secure along every reachable sequence
+  Monte-Carlo (100 random 2-step trajectories, float32 agent): sequence in certified set 100/100, step-2 post-action state inside certified band 100/100
+  time 9.9s

@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------------------------
+# Not part of the public repository
+# ---------------------------------------------------------------------------------------------
+# legacy reference implementation and papers
+/main.py
+*.pdf
+
+# examples / tests that need main.py or are not part of the RL case study
+/examples/case9_quickstart.py
+/examples/from_main_py.py
+/tests/regression/
+
+# RL agent: training scripts, Julia environment, full SB3 checkpoint, notes ...
+/wscc9_maskableppo_policy_extraction/*
+# ... except what the case study needs: the network data, the actor weights and the SB3 'data' file
+!/wscc9_maskableppo_policy_extraction/WSCC_9_bus.raw
+!/wscc9_maskableppo_policy_extraction/extracted/
+/wscc9_maskableppo_policy_extraction/extracted/*
+!/wscc9_maskableppo_policy_extraction/extracted/wscc9_maskableppo_weights.npz
+!/wscc9_maskableppo_policy_extraction/original_files/
+/wscc9_maskableppo_policy_extraction/original_files/*
+!/wscc9_maskableppo_policy_extraction/original_files/data
+
+# HPC job logs (keep the folder itself)
+/shell/outputs/*
+!/shell/outputs/.gitkeep
+
+# ---------------------------------------------------------------------------------------------
+# Python / tooling
+# ---------------------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.log
+
+# editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

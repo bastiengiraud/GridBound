@@ -1,0 +1,109 @@
+Sequential(Linear(26->64), Tanh(), Linear(64->64), Tanh(), Linear(64->73); deploy_u=2^-24)
+
+=== MEASUREMENT NOISE at reset (delta = 0): true delta = [0. 0. 0.], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
+  nominal action: Pg2-40MW
+  same-action radius: certified 2.23%  |  breaking noise: 2.33% (noise found that makes it pick Pg2-45MW)
+  per measurement group (only that group noisy):
+     generation (Pg slack, 2, 3)  certified >= 10.78%              breaks at 13.91% -> Pg2-45MW
+     loads (P, Q)                 certified >= 3.55%               breaks at 3.72% -> Pg2-45MW
+     PV voltages                  certified >= 20% (whole range)   no break found up to 20%
+     line loadings                certified >= 15.16%              breaks at 15.65% -> Pg2-45MW
+     transformer loadings         certified >= 20% (whole range)   no break found up to 20%
+  safe-action radius (N-0 (unique PF, no overload, slack in [0, 250] MW), next-step load change +-0.06): every action the agent can pick under noise up to 20.00% is certified safe (whole tested range)
+  certified action set at fixed noise levels:
+     +- 0.5%: Pg2-40MW                                                                       all safe
+     +- 1.0%: Pg2-40MW                                                                       all safe
+     +- 2.0%: Pg2-40MW                                                                       all safe
+     +- 5.0%: Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW                                      all safe
+     +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+55 more, 61 in total) all safe
+  time 9.8s
+
+=== MEASUREMENT NOISE at last training state: true delta = [0.008 0.002 0.004], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (123.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
+  nominal action: Pg3-5MW
+  same-action radius: certified 1.45%  |  breaking noise: 1.92% (noise found that makes it pick Pg3-10MW)
+  per measurement group (only that group noisy):
+     generation (Pg slack, 2, 3)  certified >= 4.69%               breaks at 5.20% -> Pg3-10MW
+     loads (P, Q)                 certified >= 2.81%               breaks at 3.48% -> Pg3-10MW
+     PV voltages                  certified >= 20% (whole range)   no break found up to 20%
+     line loadings                certified >= 12.38%              breaks at 16.04% -> Pg3-10MW
+     transformer loadings         certified >= 15.74%              breaks at 17.21% -> Pg2-40MW
+  safe-action radius (N-0 (unique PF, no overload, slack in [0, 250] MW), next-step load change +-0.06): every action the agent can pick under noise up to 20.00% is certified safe (whole tested range)
+  certified action set at fixed noise levels:
+     +- 0.5%: Pg3-5MW                                                                        all safe
+     +- 1.0%: Pg3-5MW                                                                        all safe
+     +- 2.0%: Pg2-40MW | Pg3-10MW | Pg3-5MW                                                  all safe
+     +- 5.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+26 more, 32 in total) all safe
+     +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+55 more, 61 in total) all safe
+  time 12.6s
+
+=== MEASUREMENT NOISE at heavy load (delta = +0.3): true delta = [0.3 0.3 0.3], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
+  nominal action: Pg3-5MW
+  same-action radius: certified 1.02%  |  breaking noise: 1.72% (noise found that makes it pick Pg3-10MW)
+  per measurement group (only that group noisy):
+     generation (Pg slack, 2, 3)  certified >= 3.59%               breaks at 6.09% -> Pg3-10MW
+     loads (P, Q)                 certified >= 2.03%               breaks at 2.91% -> Pg3-10MW
+     PV voltages                  certified >= 20% (whole range)   no break found up to 20%
+     line loadings                certified >= 7.77%               breaks at 12.41% -> Pg3-10MW
+     transformer loadings         certified >= 6.88%               breaks at 13.36% -> Pg2-10MW
+  safe-action radius (N-0 (unique PF, no overload, slack in [0, 250] MW), next-step load change +-0.06): every action the agent can pick under noise up to 20.00% is certified safe (whole tested range)
+  certified action set at fixed noise levels:
+     +- 0.5%: Pg3-5MW                                                                        all safe
+     +- 1.0%: Pg3-5MW                                                                        all safe
+     +- 2.0%: idle | Pg2-40MW | Pg2-35MW | Pg2-30MW | Pg2-20MW | Pg2-15MW ... (+10 more, 16 in total) all safe
+     +- 5.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+44 more, 50 in total) all safe
+     +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+55 more, 61 in total) all safe
+  time 12.8s
+
+=== MEASUREMENT NOISE at light load (delta = -0.3): true delta = [-0.3 -0.3 -0.3], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
+  nominal action: Pg2-45MW
+  same-action radius: certified 9.14%  |  breaking noise: none found up to 20%
+  per measurement group (only that group noisy):
+     generation (Pg slack, 2, 3)  certified >= 20% (whole range)   no break found up to 20%
+     loads (P, Q)                 certified >= 20% (whole range)   no break found up to 20%
+     PV voltages                  certified >= 20% (whole range)   no break found up to 20%
+     line loadings                certified >= 20% (whole range)   no break found up to 20%
+     transformer loadings         certified >= 20% (whole range)   no break found up to 20%
+  safe-action radius (N-0 (unique PF, no overload, slack in [0, 250] MW), next-step load change +-0.06): every action the agent can pick under noise up to 10.35% is certified safe
+  certified action set at fixed noise levels:
+     +- 0.5%: Pg2-45MW                                                                       all safe
+     +- 1.0%: Pg2-45MW                                                                       all safe
+     +- 2.0%: Pg2-45MW                                                                       all safe
+     +- 5.0%: Pg2-45MW                                                                       all safe
+     +-10.0%: Pg2-45MW | Pg2-40MW                                                            all safe
+  time 3.6s
+
+=== MEASUREMENT NOISE at line 8-9 open: true delta = [0. 0. 0.], lines (1, 1, 1, 1, 1, 0), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
+  nominal action: Pg2-40MW
+  same-action radius: certified 2.54%  |  breaking noise: 3.36% (noise found that makes it pick Pg2-45MW)
+  per measurement group (only that group noisy):
+     generation (Pg slack, 2, 3)  certified >= 8.09%               breaks at 8.46% -> Pg2-45MW
+     loads (P, Q)                 certified >= 5.74%               breaks at 6.80% -> Pg2-45MW
+     PV voltages                  certified >= 20% (whole range)   no break found up to 20%
+     line loadings                certified >= 11.13%              breaks at 11.58% -> Pg2-45MW
+     transformer loadings         certified >= 20% (whole range)   no break found up to 20%
+  safe-action radius (N-0 (unique PF, no overload, slack in [0, 250] MW), next-step load change +-0.06): every action the agent can pick under noise up to 10.43% is certified safe
+  certified action set at fixed noise levels:
+     +- 0.5%: Pg2-40MW                                                                       all safe
+     +- 1.0%: Pg2-40MW                                                                       all safe
+     +- 2.0%: Pg2-40MW                                                                       all safe
+     +- 5.0%: Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW | Pg3-20MW                all safe
+     +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+24 more, 30 in total) all safe
+  time 9.5s
+
+=== MEASUREMENT NOISE at after +0.5 jump at bus 8: true delta = [0.  0.  0.5], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
+  nominal action: Pg2-45MW
+  same-action radius: certified 0.51%  |  breaking noise: 0.77% (noise found that makes it pick Pg2-40MW)
+  per measurement group (only that group noisy):
+     generation (Pg slack, 2, 3)  certified >= 2.38%               breaks at 4.03% -> Pg2-40MW
+     loads (P, Q)                 certified >= 0.86%               breaks at 1.27% -> Pg2-40MW
+     PV voltages                  certified >= 20% (whole range)   no break found up to 20%
+     line loadings                certified >= 3.71%               breaks at 5.52% -> Pg2-40MW
+     transformer loadings         certified >= 8.36%               breaks at 11.82% -> Pg2-40MW
+  safe-action radius (N-0 (unique PF, no overload, slack in [0, 250] MW), next-step load change +-0.06): every action the agent can pick under noise up to 20.00% is certified safe (whole tested range)
+  certified action set at fixed noise levels:
+     +- 0.5%: Pg2-45MW                                                                       all safe
+     +- 1.0%: Pg2-45MW | Pg2-40MW | Pg2-35MW                                                 all safe
+     +- 2.0%: Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW | Pg3-10MW | Pg3-5MW                 all safe
+     +- 5.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+23 more, 29 in total) all safe
+     +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+55 more, 61 in total) all safe
+  time 11.8s

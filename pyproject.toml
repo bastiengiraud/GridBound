@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "certflow"
+version = "0.1.0"
+description = "Formal verification of neural-network controllers and RL agents through implicit AC power-flow models (Taylor models, DeepZ, Krawczyk)"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Bastien Giraud", email = "bagir@dtu.dk" }]
+keywords = ["formal verification", "neural networks", "reinforcement learning", "power flow",
+            "reachability", "Krawczyk", "Taylor models", "power systems"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = ["numpy>=1.23", "scipy>=1.9"]
+
+[project.optional-dependencies]
+pandapower = ["pandapower"]            # certflow.power.from_pandapower
+torch = ["torch"]                      # certflow.nn.from_torch
+test = ["pytest"]
+all = ["pandapower", "torch", "pytest"]
+
+[project.urls]
+Repository = "https://github.com/bastiengiraud/GridBound"
+Issues = "https://github.com/bastiengiraud/GridBound/issues"
+
+[tool.setuptools.packages.find]
+include = ["certflow*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
