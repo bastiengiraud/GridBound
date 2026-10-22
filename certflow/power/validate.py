@@ -1,6 +1,6 @@
 """Monte-Carlo validation of a certificate: sample the input set, run the DEPLOYED controller and the AC power
 flow (independent polar Newton), and check every sampled quantity against the certified bands.  Also gives the
-empirical (Monte-Carlo) band for tightness ratios (paper Table VI)."""
+empirical (Monte-Carlo) band, e.g. to measure how tight the certified bands are."""
 from __future__ import annotations
 
 import numpy as np

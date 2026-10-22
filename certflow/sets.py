@@ -65,7 +65,7 @@ class AffineSet:
 
 
 def low_rank_load_set(x0, Gdirs, frac, meta=None) -> AffineSet:
-    """The paper's deterministic robustness set (eq. 19):  x = x0 * (1 + frac * Gdirs e).
+    """Low-rank deterministic load set:  x = x0 * (1 + frac * Gdirs e),  e in [-1, 1]^K.
 
     x0    : nominal stacked loads [Pd; Qd] (2 nl,)
     Gdirs : (2 nl, K) normalised mode matrix

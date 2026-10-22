@@ -1,4 +1,4 @@
-"""The WSCC-9 RL example's hard-coded network data matches the PSS/E file the agent was trained on."""
+"""The WSCC-9 RL example's hard-coded network data matches the PSS/E file of the training environment."""
 import os
 import sys
 

@@ -475,7 +475,7 @@ class AngleDifference(Constraint):
 
 def default_constraints(grid, vmin=None, vmax=None, v_tol=1e-4, lim_tol=1e-3, br_tol=1e-4, branch=True,
                         angle=True):
-    """The paper's constraint set: |V|, gen P, gen Q, slack P/Q, branch current, angle difference."""
+    """The default constraint set: |V|, gen P, gen Q, slack P/Q, branch current, angle difference."""
     vmin = grid.vmin if vmin is None else vmin
     vmax = grid.vmax if vmax is None else vmax
     cs = [VoltageMagnitude(grid, vmin, vmax, tol=v_tol), GenActivePower(grid, tol=lim_tol),

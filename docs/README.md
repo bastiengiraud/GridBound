@@ -1,40 +1,59 @@
 # certflow documentation
 
-| Document | What it covers |
+certflow is an **independent safety auditor for learned grid controllers**. It takes a trained controller or agent
+as it is, whatever its training data, loss or reward, and proves whether the power grid stays within its limits for
+every operating condition in a given set. If it cannot prove safety, it shows where and why. For continuous
+controllers it can also compute a certified correction.
+
+The guarantees are mathematical, not statistical. Every result is computed with validated numerics: Taylor models,
+interval bounds and outward rounding. It holds for **all** inputs in the set, not only for sampled ones. Every case
+study also runs an independent Monte-Carlo check of the certified claims.
+
+## Documents
+
+| Document | Contents |
 |---|---|
-| [method.md](method.md) | The method of Giraud, Vorwerk & Chatzivasileiadis, *Verified Safety Layers for AC Surrogates*, step by step, with the function that implements each step. Read this first. |
-| [rl_reachability.md](rl_reachability.md) | Mode 2: certified reachability of a discrete RL agent (WSCC-9 MaskablePPO) over load uncertainty: one-step, N-1 and two-step. |
-| [measurement_noise.md](measurement_noise.md) | Mode 3: certified robustness radius of the agent's decision to measurement noise at an operating point. |
+| [method.md](method.md) | The verification method, step by step: validated arithmetic, network reachability, the Krawczyk existence and uniqueness proof for the AC power flow, bounding of operational quantities, domain splitting, and safety restoration. Each step names the function that implements it. Read this first. |
+| [rl_reachability.md](rl_reachability.md) | Auditing a discrete-action RL agent over load uncertainty: which actions it can take, whether each is safe one step ahead (N-0 and N-1), and which action sequences can occur over two steps. |
+| [measurement_noise.md](measurement_noise.md) | Auditing an agent's robustness to measurement noise: the largest noise level for which its decision provably stays the same, or provably stays safe. |
 
-## The three modes at a glance
+## The three audit modes
 
-| Mode | Question | Uncertain input | Where the certified power flow sits | Output | Entry point |
+| Mode | Question | Uncertain input | Certified power flow | Result | Entry point |
 |---|---|---|---|---|---|
-| 1. Controller verification + restoration (the paper) | Does the NN dispatch keep every operational limit for every load in the set? If not, which constant offset fixes it? | low-rank load zonotope $x = x_0 \odot (1 + r_f G\varepsilon)$ | **after** the NN: NN → setpoints → PF | certified bands per constraint; (piecewise) offset | `PFVerifier.certify`, `Restorer.restore_split` |
-| 2. RL reachability | Which actions can the agent take for every load in a box, and is each one safe one step ahead (N-0, N-1)? Which action sequences are reachable in two steps? | load-admittance deviation $\delta \in \delta_c \pm w$ | **before** the NN (state → observation) **and after** it (post-action state) | certified action sets per sub-box, per-action safety, N-1 count bounds, two-step tree | `DiscretePolicyVerifier`, `MultiStepVerifier` |
-| 3. Measurement noise | At a known operating point, how much sensor noise can the agent tolerate and still pick the same action, or a safe one? | independent noise $\lvert\eta_i\rvert \le \varepsilon\lvert o_i\rvert$ on every measurement | none for the observation (the state is exact); only in the safety check of each reachable action | certified and falsified radius $\varepsilon$; action sets per noise level | `robustness_radius` |
+| **Controller verification and restoration** | Does a continuous dispatch controller (loads → generator setpoints) keep every operational limit for every load in the set? If not, which constant correction fixes it? | low-rank load set $x = x_0 \odot (1 + r_f G\varepsilon)$ | after the controller: setpoints → grid state | certified bounds per limit; a (piecewise) constant offset that makes them safe | `PFVerifier.certify`, `Restorer.restore_split` |
+| **RL reachability** | Which actions can a discrete agent take for every load in a box, and is each action safe one step ahead? Which action sequences are reachable? | load deviation $\delta \in \delta_c \pm w$ | before the agent (grid state → observation) and after the action (post-action state, N-0 and N-1) | certified action sets per sub-box, per-action safety, N-1 bounds, a multi-step tree (uncertainty re-boxed or tracked per step) | `DiscretePolicyVerifier`, `MultiStepVerifier` |
+| **Measurement noise** | At a known operating point, how much sensor noise can the agent tolerate and still pick the same action, or a safe one? | independent noise $\lvert\eta_i\rvert \le \varepsilon\lvert o_i\rvert$ on each measurement | only in the safety check of each action the agent might pick | certified and falsified noise radius; action sets per noise level | `robustness_radius` |
 
-All three modes share the same core:
+All three modes share one core:
 
-- degree-2 Taylor models over shared noise symbols (`certflow.tm`);
-- DeepZ network reachability (`certflow.nn`);
-- the Krawczyk existence/uniqueness proof (`certflow.krawczyk`);
-- adaptive splitting (`certflow.split`).
+- degree-2 Taylor models over shared symbols (`certflow.tm`);
+- neural-network reachability (`certflow.nn`);
+- the Krawczyk proof that the power flow has a unique solution (`certflow.krawczyk`);
+- adaptive splitting of the input set (`certflow.split`).
 
-The modes differ in where the uncertainty enters and in what is checked.
+They differ in where the uncertainty enters and in what is checked.
 
-## Notation used throughout
+## What "safe" means
 
-| Paper | Code | Meaning |
+Safety is defined by the grid, not by the controller's training objective. The limits used in the RL case study are
+listed in [rl_reachability.md](rl_reachability.md#what-counts-as-a-violation): a unique power-flow solution, branch
+ratings, voltage magnitudes at every bus and the slack generator's range, at N-0 and after every line outage. For the
+dispatch controller they are the constraint families in [method.md](method.md#7-bounding-the-operational-quantities).
+New limit families can be added without changing the core.
+
+## Notation
+
+| Symbol | In the code | Meaning |
 |---|---|---|
 | $\varepsilon \in [-1,1]^K$ | `e`, the first `K` symbols of a `TM` | input (box) symbols |
 | $x = c_0 + c^\top\varepsilon + \varepsilon^\top q\,\varepsilon + [-R,R]$ | `TM(c0, C, Q, R)` | degree-2 Taylor model |
-| $\varepsilon_{\text{new},j}$ | symbols appended after the first `K` | DeepZ relaxation symbols (one per crossing / relaxed neuron) |
-| $z = (v_{r,ns}, v_{i,ns})$ | `RectPFSystem` state, `z0`, `x1` | rectangular voltage state of the non-slack buses |
+| $\varepsilon_{\text{new},j}$ | symbols appended after the first `K` | relaxation symbols (one per relaxed neuron) |
+| $z = (v_{r,ns}, v_{i,ns})$ | `RectPFSystem` state | rectangular voltages of the non-slack buses |
 | $h(z,\varepsilon) = h_0(z) - S(\varepsilon)$ | `system.residual(x)` minus `S` | power-flow residual |
-| $M \approx J(z_1)^{-1}$ | `M` in `krawczyk()` | Krawczyk preconditioner |
-| $K_b$, $\rho(K_b)$ | `_Kb(r)`, `specrad` | slope majorant and its spectral radius |
-| $r^*$ | `KrawczykResult.r` | verified enclosure radius |
-| leaf | `LeafResult`, `PolicyLeaf` | sub-box of the input box |
+| $M \approx J(z_0)^{-1}$ | `M` in `krawczyk()` | Krawczyk preconditioner |
+| $K_b$, $\rho(K_b)$ | `_Kb(r)`, `specrad` | slope bound and its spectral radius |
+| $r^*$ | `KrawczykResult.r` | radius of the certified state enclosure |
+| leaf | `LeafResult`, `PolicyLeaf` | sub-box of the input set |
 
-Line links point to the current version of the code. If a line has moved, search for the function name.
+Links to the code point at the current line numbers. If a line has moved, search for the function name.

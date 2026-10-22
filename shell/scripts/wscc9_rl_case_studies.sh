@@ -5,6 +5,7 @@
 # Extra options go through ARGS, e.g. enforce N-1 or a fast smoke run:
 #   ARGS="--require-n1" bsub < shell/scripts/wscc9_rl_case_studies.sh
 #   ARGS="--quick"      bsub < shell/scripts/wscc9_rl_case_studies.sh
+#   ARGS="--study two-step --track both --step-change common" bsub < shell/scripts/wscc9_rl_case_studies.sh
 # (bsub passes your current environment, so ARGS reaches the job.)  For the same work in parallel, use
 # wscc9_rl_array.sh instead.
 #BSUB -q hpc

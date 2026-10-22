@@ -15,9 +15,10 @@ Environment facts reproduced (from the Julia/Python sources):
   * actions (73): idle | gen 2/3 dP in +-5..50 MW | V setpoint 2/3 in +-0.01..0.05 | open/close each line
   * mask: dP keeps Pg in [0, Pmax], dV keeps V in [0.95, 1.05], open only closed lines / close only open ones
   * a step applies the action and the next load deviation simultaneously; the episode fails if the PF fails;
-    N-0 overloads (S > rating) and slack outside [0, 250] MW are penalised.
+    N-0 overloads (S > rating) and slack outside [0, 250] MW are penalised.  The verification does not use the
+    reward: it checks the grid limits (see StepChecker) at N-0 and after every line outage.
 
-Network data: the PSS/E file the agent was trained on, wscc9_maskableppo_policy_extraction/WSCC_9_bus.raw (identical
+Network data: the PSS/E file of the training environment, wscc9_maskableppo_policy_extraction/WSCC_9_bus.raw (identical
 to eRoots-Analytics/PublicGridCollection psse/"WSCC 9 bus.raw" up to the slack's initial dispatch, which the power
 flow overwrites).  It differs from the textbook Anderson data on lines 5-4, 9-6, 7-8.  The values used below are
 checked against that file by ``read_raw`` (tests/test_wscc9_data.py), and the model is checked against the real
@@ -43,7 +44,8 @@ LOAD_BUSES = [5, 6, 8]
 S_NOM = np.array([125 + 50j, 90 + 30j, 100 + 35j])          # MVA
 LINE_RATING, XFMR_RATING = 250.0, 300.0
 PMIN, PMAX = {2: 0.0, 3: 0.0}, {2: 300.0, 3: 270.0}
-VMIN_SET, VMAX_SET = 0.95, 1.05
+VMIN_SET, VMAX_SET = 0.95, 1.05                              # PV setpoint band (action mask)
+VMIN_BUS, VMAX_BUS = 0.95, 1.05                              # |V| limits checked at EVERY bus, N-0 and N-1
 SLACK_MIN, SLACK_MAX = 0.0, 250.0
 DP_LEVELS = [-50.0, -45.0, -40.0, -35.0, -30.0, -25.0, -20.0, -15.0, -10.0, -5.0,
              5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0]
@@ -275,11 +277,19 @@ class WSCC9Model:
 class StepChecker:
     """Certified one-step safety of an action: post-action PF over the next load deviations.
 
+    Violations (the same limits at N-0 and, with ``n1``, after every line outage):
+      * the PF has no (unique) solution, e.g. the outage islands the grid
+      * a line / transformer loading max(|S_from|, |S_to|) above its rating (250 / 300 MVA)
+      * |V| outside [VMIN_BUS, VMAX_BUS] at ANY bus
+      * slack active power outside [SLACK_MIN, SLACK_MAX] MW
+
     margin     : the next deviation delta' may differ from the observed delta by up to +-margin per load
                  (0 = loads frozen during the step)
-    n1         : also screen the post-action state for N-1 line outages (certflow.power.n1_analysis), with the
-                 env's metric  n1 = #overloads over all line outages + 3 * #PF failures
-    require_n1 : count a possible N-1 overload / PF failure as unsafe (the env only penalises it, -0.5 each)"""
+    n1         : also screen the post-action state for every line outage (certflow.power.n1_analysis), reported as
+                 certified [lower, upper] bounds on the number of overloads, PF failures, (outage, bus) voltage
+                 violations and outages with a slack violation (and, for comparison with the training environment,
+                 its N-1 penalty count = overloads + 3 x PF failures)
+    require_n1 : count a possible N-1 violation of any kind as unsafe"""
     model: WSCC9Model
     margin: float = 0.0
     max_leaves: int = 64
@@ -288,8 +298,13 @@ class StepChecker:
     _cache: dict = field(default_factory=dict)
 
     def certify(self, st: OperatingState, dlo, dhi):
-        """Certified post-state bands over delta in [dlo, dhi] (with box splitting if needed)."""
-        key = (st, tuple(np.round(dlo, 12)), tuple(np.round(dhi, 12)), self.n1)
+        """Certified post-state bands over the box delta in [dlo, dhi] (with box splitting if needed)."""
+        return self.certify_set(st, AffineSet(0.5 * (dlo + dhi), np.diag(0.5 * (dhi - dlo))))
+
+    def certify_set(self, st: OperatingState, U: AffineSet):
+        """Certified post-state bands over the affine load set  delta = U.c + U.G e,  e in [-1, 1]^U.K  (any number
+        of symbols, e.g. the history-tracked uncertainty of a multi-step tree); split if needed."""
+        key = (st, tuple(np.round(U.c, 12)), tuple(np.round(U.G, 12).ravel()), U.G.shape, self.n1)
         if key in self._cache:
             return self._cache[key]
         m = self.model
@@ -298,7 +313,7 @@ class StepChecker:
             res = dict(formal=True, pf=False, reason="islanded")
             self._cache[key] = res
             return res
-        U = AffineSet(0.5 * (dlo + dhi), np.diag(0.5 * (dhi - dlo)))
+        K = U.K
         spec_fn = lambda gg, a, b: m.specs(gg, st, U.sub_tm(0.5 * (a + b), 0.5 * (b - a)))
         on = [i for i in m.line_idx if st.status[i]]
 
@@ -308,38 +323,52 @@ class StepChecker:
             load[m.xfmr_idx] = qty.branch_apparent_power(g, enc, m.xfmr_idx).bounds()[1] * SN / XFMR_RATING * 100
             ps = enc.P.take([m.slk]).bounds()
             vm = qty.vmag(enc, list(range(g.N))).bounds()
-            return dict(load=load, slack=(ps[0][0] * SN, ps[1][0] * SN), vmin=float(vm[0].min()),
-                        vmax=float(vm[1].max()), rho=enc.rho)
+            return dict(load=load, slack=(ps[0][0] * SN, ps[1][0] * SN), vlo=vm[0], vhi=vm[1], rho=enc.rho)
 
-        leaves, ok = enclose_pf_split(g, spec_fn, -np.ones(3), np.ones(3), reduce=reduce, max_leaves=self.max_leaves)
+        leaves, ok = enclose_pf_split(g, spec_fn, -np.ones(K), np.ones(K), reduce=reduce, max_leaves=self.max_leaves)
         if not ok or not leaves:
             res = dict(formal=False, pf=None, reason="PF not certified")
         else:
             res = dict(formal=True, pf=True, nleaf=len(leaves), load=np.max([L["load"] for L in leaves], 0),
                        slack=(min(L["slack"][0] for L in leaves), max(L["slack"][1] for L in leaves)),
-                       vmin=min(L["vmin"] for L in leaves), vmax=max(L["vmax"] for L in leaves),
+                       vlo=np.min([L["vlo"] for L in leaves], 0), vhi=np.max([L["vhi"] for L in leaves], 0),
                        rho=max(L["rho"] for L in leaves))
+            res.update(vmin=float(res["vlo"].min()), vmax=float(res["vhi"].max()))
             if self.n1:
                 rating = np.r_[np.full(len(LINES), LINE_RATING), np.full(len(XFMRS), XFMR_RATING)]
-                rep = n1_analysis(g, spec_fn, -np.ones(3), np.ones(3), outages=on, rating_mva=rating,
-                                  max_leaves=self.max_leaves)
-                res.update(n1=rep.count_bounds(fail_weight=3), n1_report=rep, n1_worst=rep.worst_loading())
+                rep = n1_analysis(g, spec_fn, -np.ones(K), np.ones(K), outages=on, rating_mva=rating,
+                                  max_leaves=self.max_leaves, vlim=(VMIN_BUS, VMAX_BUS),
+                                  slack=(m.slk, SLACK_MIN, SLACK_MAX))
+                res.update(n1_over=rep.count_bounds(kinds=("overload",)),            # overloaded (outage, branch) pairs
+                           n1_fail=rep.count_bounds(fail_weight=1, kinds=()),        # outages without a PF solution
+                           n1=rep.count_bounds(fail_weight=3),                       # training env's metric (overloads + 3 x fails)
+                           n1_v=rep.count_bounds(kinds=("voltage",)),                # (outage, bus) |V| violations
+                           n1_s=rep.count_bounds(kinds=("slack",)),                  # outages with a slack violation
+                           n1_secure=rep.secure, n1_report=rep, n1_worst=rep.worst_loading(),
+                           n1_vrange=rep.voltage_range(), n1_srange=rep.slack_range())
         self._cache[key] = res
         return res
 
     def __call__(self, st, a, dlo, dhi):
-        """ActionCheck for taking action a in state st when delta in [dlo, dhi]."""
-        nxt = st.apply(a)
-        res = self.certify(nxt, dlo - self.margin, dhi + self.margin)
+        """ActionCheck for taking action a in state st when delta in [dlo, dhi] (next load: the box +- margin)."""
+        return self._verdict(self.certify(st.apply(a), dlo - self.margin, dhi + self.margin))
+
+    def check_set(self, st, a, U_next: AffineSet):
+        """ActionCheck for taking action a in state st when the NEXT load deviation lies in the affine set U_next."""
+        return self._verdict(self.certify_set(st.apply(a), U_next))
+
+    def _verdict(self, res):
         if not res["formal"]:
             return ActionCheck(False, False, res)
         if not res["pf"]:
             return ActionCheck(False, True, res)                       # certain failure (islanding)
         over = res["load"].max() > 100.0
         slack_bad = res["slack"][0] < SLACK_MIN or res["slack"][1] > SLACK_MAX
-        n1_bad = bool(self.require_n1 and self.n1 and res["n1"][1] > 0)
-        res = dict(res, overload=bool(over), slack_violation=bool(slack_bad), n1_violation=n1_bad)
-        return ActionCheck(not (over or slack_bad or n1_bad), True, res)
+        volt_bad = res["vmin"] < VMIN_BUS or res["vmax"] > VMAX_BUS
+        n1_bad = bool(self.require_n1 and self.n1 and not res["n1_secure"])
+        res = dict(res, overload=bool(over), slack_violation=bool(slack_bad), voltage_violation=bool(volt_bad),
+                   n1_violation=n1_bad)
+        return ActionCheck(not (over or slack_bad or volt_bad or n1_bad), True, res)
 
 
 def make_problem(model: WSCC9Model, st: OperatingState, delta_c, delta_w, checker: StepChecker = None):
@@ -373,6 +402,49 @@ def multistep_problem(model: WSCC9Model, checker: StepChecker):
     transition = lambda st, a: st.apply(a)
     propagate = lambda lo, hi: (lo - checker.margin, hi + checker.margin)
     return problem, transition, propagate
+
+
+def step_generator(margin, kind="independent"):
+    """Generator matrix of ONE step's load change  delta_{t+1} = delta_t + G_step w,  w in [-1, 1]^r:
+    "independent": every load moves by up to +-margin on its own (G_step = margin * I, r = 3);
+    "common":      all loads move together by the same amount (G_step = margin * 1, r = 1)."""
+    if kind == "independent":
+        return float(margin) * np.eye(3)
+    if kind == "common":
+        return float(margin) * np.ones((3, 1))
+    raise ValueError(f"unknown step-change model {kind!r}")
+
+
+def make_problem_history(model: WSCC9Model, st: OperatingState, U: AffineSet, checker: StepChecker, step_gen):
+    """Callbacks for DiscretePolicyVerifier over the affine load set  delta = U.c + U.G e  (any number of symbols:
+    the initial box symbols plus one block of new symbols per earlier step).  The safety check certifies the next
+    state over the next load  delta' = delta(e) + step_gen w,  i.e. over the sub-box with the new symbols appended
+    (no re-boxing)."""
+    mask = st.mask()
+    K = U.K
+
+    def observe(lo, hi):
+        d = U.sub_tm(0.5 * (lo + hi), 0.5 * (hi - lo))
+        enc = model.enclose(st, d)
+        if enc is None or not enc.ok:
+            return Observation(False, score=(enc.score[:K] if enc is not None and enc.score is not None else None))
+        return Observation(True, model.obs_tm(st, d, enc), dict(rho=enc.rho))
+
+    def check(a, lo, hi, obs):
+        ec, h = 0.5 * (lo + hi), 0.5 * (hi - lo)
+        U_next = AffineSet(U.c + U.G @ ec, np.hstack([U.G * h[None, :], step_gen]))
+        return checker.check_set(st, a, U_next)
+
+    return dict(observe=observe, mask=(lambda lo, hi, obs: mask), check=check)
+
+
+def multistep_problem_history(model: WSCC9Model, checker: StepChecker, step_gen):
+    """Callbacks for certflow.policy.MultiStepVerifier(track="history"): problem(state, U), transition, extend.
+    Each step appends the columns of ``step_gen`` (new symbols) to the load set instead of re-boxing it."""
+    problem = lambda st, U: make_problem_history(model, st, U, checker, step_gen)
+    transition = lambda st, a: st.apply(a)
+    extend = lambda U: AffineSet(U.c, np.hstack([U.G, step_gen]))
+    return problem, transition, extend
 
 
 def infer_state_from_obs(model: WSCC9Model, obs):

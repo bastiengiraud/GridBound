@@ -4,11 +4,11 @@
 
 with a JACOBIAN THAT IS AFFINE IN z (any bilinear/quadratic residual, e.g. the AC power flow in rectangular
 coordinates).  For such systems the Jacobian's state-derivatives H_j = dJ/dz_j are constant, which gives the
-correlated remainder  rem(r) = sum_j |M H_j| r_j  of the paper (eq. 28).
+correlated remainder  rem(r) = sum_j |M H_j| r_j.
 
 Given a linearisation point z0, the solver builds the Newton warm step  x1(e) = z0 - M (F(z0) - S(e))  as a
 Taylor model, bounds the residual corr >= |M (F(x1(e)) - S(e))| and the slope majorant
-Kb(r) >= |I - M J(xi)| over xi in x1(e) +- r, and runs the monotone inflation loop (Algorithm 1).  If
+Kb(r) >= |I - M J(xi)| over xi in x1(e) +- r, and runs a monotone inflation loop on r (starting from r = 0).  If
 rho(Kb) < 1 and r >= (I - Kb)^-1 corr, then for EVERY e there is a unique solution z*(e) in x1(e) +- r.
 In rigorous mode the float candidate radius is re-checked a posteriori with all rounding errors included.
 

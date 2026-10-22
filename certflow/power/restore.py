@@ -1,7 +1,7 @@
-"""Verified safety restoration (paper Sec. IV): constant offset d = (dPg, dVg) on the controller output, found by a
+"""Verified safety restoration: constant offset d = (dPg, dVg) on the controller output, found by a
 sequential trust-region QP on the constraints' linearised rows and RE-CERTIFIED after every step; if one offset
 cannot cover the box, the box is bisected (violation-targeted) and each part gets its own offset
-(piecewise-constant offset controller).  Algorithms 2 and 3.
+(piecewise-constant offset controller).
 
 The QP is assembled generically from the constraints' :class:`RowBlock` s, so new constraint families take
 part in the restoration without changes here.
@@ -142,7 +142,7 @@ class Restorer:
     """Restore a verifier's box to FORMALLY SAFE with a (piecewise) constant output offset.
 
     seeds : optional dict  name -> callable(x_centre) -> (Pg, Vg)  of reference dispatches (e.g. an AC-OPF
-            solver) used as alternative starting offsets d0 = seed(x_c) - controller(x_c)  (Algorithm 3)."""
+            solver) used as alternative starting offsets d0 = seed(x_c) - controller(x_c)."""
 
     def __init__(self, verifier, options: RestoreOptions = None, seeds=None):
         self.ver = verifier
@@ -190,7 +190,7 @@ class Restorer:
     def _predict(self, C, lin, d):
         return float(sum(c.predict_infeasibility(C.bands[c.name], lin, d) for c in self.ver.cons))
 
-    # ------------------------------------------------------------------ one box (Algorithm 2)
+    # ------------------------------------------------------------------ one box
     def restore_box(self, lo=None, hi=None, warm=None, seed=None) -> RestoreResult:
         ver, o, ng = self.ver, self.opt, self.ng
         lo, hi = ver.U.full_box() if lo is None else (np.asarray(lo, float), np.asarray(hi, float))
@@ -273,7 +273,7 @@ class Restorer:
         j = int(np.argmax(sc))
         return j, float(sc[j])
 
-    # ------------------------------------------------------------------ piecewise restoration (Algorithm 3)
+    # ------------------------------------------------------------------ piecewise restoration (box splitting)
     def restore_box_task(self, lo, hi, warm=None, seed=None):
         return self.restore_box(lo, hi, warm=warm, seed=seed)
 
@@ -360,7 +360,7 @@ class _AncestorView:
 @dataclass
 class PiecewiseOffsetController:
     """Deployable restored controller: the NN plus the certified constant offset of the e-box containing the
-    operating point (paper Sec. IV-C)."""
+    operating point."""
     leaves: list            # RestoreResult (lo, hi, offset)
 
     def offset(self, e):

@@ -15,7 +15,7 @@ from ..nn.network import NNReachable
 
 
 class DispatchController:
-    """NN dispatch policy (P_load, Q_load) -> (Pg, Vg), as in the paper.
+    """NN dispatch policy (P_load, Q_load) -> (Pg, Vg).
 
     nn          : NNReachable with output [Pg of ACTIVE gens ; Vg of all gens] (compact layout)
     ng          : number of generators

@@ -70,7 +70,11 @@ def test_n1_bounds_sound():
     spec = lambda gg, a, b: dict(**dict(zip(("P", "Q", "V"), _specs(gg, U.sub_tm(0.5 * (a + b), 0.5 * (b - a))))),
                                  shunt=Shunt(lb, y, U.sub_tm(0.5 * (a + b), 0.5 * (b - a))),
                                  warm=(np.zeros(gg.N), np.ones(gg.N)))
-    rep = n1_analysis(g, spec, -np.ones(3), np.ones(3), outages=range(g.L), rating_mva=rating)
+    rep = n1_analysis(g, spec, -np.ones(3), np.ones(3), outages=range(g.L), rating_mva=rating,
+                      vlim=(0.95, 1.05), slack=(g.slk, 0.0, 250.0))
+    assert rep.kinds == ("overload", "voltage", "slack")
+    lo_all, hi_all = rep.count_bounds(fail_weight=1, kinds=rep.kinds)
+    assert 0 <= lo_all <= hi_all and rep.secure == (hi_all == 0)
     rng = np.random.default_rng(1)
     for r in rep.results:
         if r.islanded:
@@ -90,3 +94,7 @@ def test_n1_bounds_sound():
             m = np.isfinite(r.loading_hi)
             assert np.all(S[rep.monitored][m] <= r.loading_hi[m] + 1e-12)
             assert np.all(S[rep.monitored][m] >= r.loading_lo[m] - 1e-12)
+            assert np.all(Vm >= r.v_lo - 1e-12) and np.all(Vm <= r.v_hi + 1e-12)          # every bus |V|
+            Gd, Bd = sh.effective_GB(g2.G, g2.B, U.point(e))
+            Ps = inj_pt(Gd, Bd, th, Vm)[0][g.slk] * g.sn                                  # slack injection (MW)
+            assert r.slack_lo - 1e-9 <= Ps <= r.slack_hi + 1e-9

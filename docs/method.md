@@ -1,188 +1,246 @@
-# The method: verified safety layers for AC surrogates
+# The verification method
 
-This document explains the method of Giraud, Vorwerk & Chatzivasileiadis, *Verified Safety Layers for AC
-Surrogates: Reachability-Based Local Verification and Safety Restoration*. Each step is followed by an
-**In the code** box naming the function that performs it. Section and equation numbers refer to the paper.
+This document explains how certflow proves that a learned dispatch controller keeps the AC grid within its limits,
+and where each step lives in the code. The method follows *Verified Safety Layers for AC Surrogates:
+Reachability-Based Local Verification and Safety Restoration* (Giraud, Vorwerk, Chatzivasileiadis). Each step ends
+with an **In the code** box naming the functions that perform it.
+
+The RL modes reuse Steps 1, 3, 4, 5, 6 and 7 with a different input and output; see
+[rl_reachability.md](rl_reachability.md) and [measurement_noise.md](measurement_noise.md).
 
 ## 0. The problem
 
-An NN surrogate $f_\theta$ maps loads $x = [p_d; q_d]$ to generator setpoints $y = [p_g; V_g]$ (Sec. II-B). The
-full grid state is then obtained by solving the AC power flow (PF) with those setpoints. The goal (eq. 10) is to
-prove, for **every** load in a set $\mathcal X$:
+A neural network $f_\theta$ maps the loads $x = [p_d; q_d]$ to generator setpoints $y = [p_g; V_g]$: active power
+and voltage magnitude. The grid state that results is not an output of the network. It is the solution of the AC
+power flow (PF) with those setpoints. The goal is to prove, for **every** load $x$ in a set $\mathcal X$:
 
-1. the PF has a solution, and it is **unique** (in a known box);
-2. every operational quantity of that solution stays within limits: $|V|$, $p_g$, $q_g$, slack $p/q$, branch
-   current, angle difference.
+1. the power flow has a solution, and it is **unique** within a known box;
+2. every operational quantity of that solution stays within its limits: bus voltage magnitudes, generator active
+   and reactive power, slack active and reactive power, branch currents and angle differences.
 
-Standard bound propagation cannot do this because the state is the output of an iterative solver. The method
-replaces the solver by a validated **Krawczyk** proof over Taylor models that share their symbols with the NN's
-reachable set (Fig. 1):
+Standard bound-propagation tools for neural networks cannot do this, because the state comes from an iterative
+solver and not from a closed-form computation. certflow replaces the solver by a **validated existence and
+uniqueness proof** (Krawczyk) over Taylor models. The models share their symbols with the network's reachable set,
+so correlations between inputs, setpoints and state are kept throughout:
 
 ```
- load zonotope X ──DeepZ──▶ setpoints y(ε) ──S(ε)──▶ Krawczyk: K(Z) ⊆ Z ? ──▶ state enclosure ──▶ bounds ──▶ in limits?
-        ▲                                                  │ no (ρ ≥ 1)                                   │ no
-        └────────────────── bisect the input box ◀─────────┘                          restoration: offset d, re-certify
+ load set X ──network reachability──▶ setpoints y(ε) ──▶ specified values S(ε) ──▶ Krawczyk proof: unique PF state?
+     ▲                                                                                   │ no             │ yes
+     └──────────────────────── split the input set ◀──────────────────────────────────────┘                ▼
+                                                                        bounds on |V|, Pg, Qg, slack, |I|, Δθ
+                                                                                         │ outside a limit
+                                                                                         ▼
+                                                       restoration: constant offset d on the setpoints, re-certify
 ```
 
-In the code, `PFVerifier.certify` runs this pipeline over a box (Steps 1–7), and `Restorer` closes the loop
-(Step 8).
+`PFVerifier.certify` runs this pipeline over an input set (Steps 1–7), and `Restorer` closes the loop (Step 8).
 
 ---
 
-## 1. Validated arithmetic: Taylor models (Sec. III-B)
+## 1. Validated arithmetic: Taylor models
 
-Every uncertain quantity is a degree-2 Taylor model over shared symbols $\varepsilon\in[-1,1]^K$ (eq. 12):
+Every uncertain quantity is a degree-2 Taylor model (TM) over shared symbols $\varepsilon\in[-1,1]^K$:
 
 $$x = c_0 + c^\top \varepsilon + \varepsilon^\top q\, \varepsilon + [-R, R].$$
 
-The symbols are shared between all quantities, so correlations survive. For example, $p_g$ from the NN and the
-voltages from the PF depend on the same $\varepsilon$, and their difference does not double-count the width.
+The polynomial part is exact, and everything of degree three and higher is bounded into the remainder $R$. The
+symbols are shared between all quantities, so correlations survive. For example, the network's $p_g$ and the power
+flow's voltages depend on the same $\varepsilon$, so their difference does not count the uncertainty twice. Affine
+zonotopes, $c_0 + c^\top\varepsilon$, are the special case $q = 0$, $R = 0$.
+
+Every floating-point operation adds its own rounding error to $R$ (forward error analysis with outward rounding). The
+enclosures therefore hold for the exact real-valued quantities, not just for the floating-point computation.
 
 > **In the code**
-> - [`TM`](../certflow/tm.py#L22) is the `(c0, C, Q, R)` tuple. Arithmetic: [`add`/`sub`](../certflow/tm.py#L181), [`mul`](../certflow/tm.py#L238) (exact quadratic part, degree ≥ 3 into `R`), [`matmul`](../certflow/tm.py#L213), [`relu`](../certflow/tm.py#L270), [`clip`](../certflow/tm.py#L303), [`compose`](../certflow/tm.py#L321) (any smooth univariate function), [`sqrt`](../certflow/tm.py#L350), [`maximum`](../certflow/tm.py#L378).
-> - **Beyond the paper:** [`certflow/fp.py`](../certflow/fp.py) bounds every floating-point rounding (`gam`, `upr`, `odn`, `oup`) into `R`. The enclosures are therefore sound for the exact-real quantities, not just for the float computation ("rigorous mode", on by default).
+> - [`TM`](../certflow/tm.py#L22) is the `(c0, C, Q, R)` tuple. Operations:
+>   - [`add`, `sub`](../certflow/tm.py#L181);
+>   - [`mul`](../certflow/tm.py#L238) (exact quadratic part, degree ≥ 3 into `R`);
+>   - [`matmul`](../certflow/tm.py#L213);
+>   - [`relu`](../certflow/tm.py#L270), [`clip`](../certflow/tm.py#L303);
+>   - [`compose`](../certflow/tm.py#L321) (any smooth univariate function), [`sqrt`](../certflow/tm.py#L350), [`maximum`](../certflow/tm.py#L378).
+> - [`certflow/fp.py`](../certflow/fp.py) holds the rounding-error bounds (`gam`, `upr`, `odn`, `oup`). Rigorous mode is on by default.
 
-## 2. Local input set: the low-rank load zonotope (Sec. III-C, eqs. 13–19)
+## 2. The input set: a low-rank load zonotope
 
-The set is $\mathcal R(r_f) = \{x_0 \odot (1 + r_f\, G\varepsilon) : \varepsilon\in[-1,1]^K\}$. Here $x_0$ is the
-nominal operating load and $G$ holds $K$ RMS-normalised load modes. Verification always runs over **sub-boxes**
-$[lo, hi] \subseteq [-1,1]^K$ of $\varepsilon$-space. A sub-box with centre $e_c$ and half-widths $h$ is again a
-zonotope, $x_0 + G_x e_c + (G_x\,\mathrm{diag}\,h)\,\varepsilon'$.
+Grid loads are strongly correlated, so the set of loads to verify is a low-rank zonotope around a nominal operating
+point $x_0$:
+
+$$\mathcal R(r_f) = \{\, x_0 \odot (1 + r_f\, G\varepsilon) \;:\; \varepsilon\in[-1,1]^K \,\},$$
+
+where $G$ holds $K$ normalised load-variation modes and $r_f$ is the radius. Verification always runs over
+**sub-boxes** $[lo, hi] \subseteq [-1,1]^K$ of $\varepsilon$. A sub-box with centre $e_c$ and half-widths $h$ is
+again a zonotope, $x_0 + G_x e_c + (G_x\,\mathrm{diag}\,h)\,\varepsilon'$.
 
 > **In the code**
-> - [`low_rank_load_set(x0, Gdirs, frac)`](../certflow/sets.py#L67) implements eq. 19 and returns an [`AffineSet`](../certflow/sets.py#L19)`(c, G)`.
-> - [`AffineSet.sub_tm(ec, h)`](../certflow/sets.py#L54) gives the sub-box as a `TM` (plus the rounding of the centre/generator computation).
-> - The mode matrix itself (eqs. 14–18: geometric spectrum, RMS normalisation) is built by the experiment script and passed in as `Gdirs`. The package takes any $G$.
+> - [`low_rank_load_set(x0, Gdirs, frac)`](../certflow/sets.py#L67) builds the set as an [`AffineSet`](../certflow/sets.py#L19)`(c, G)`.
+> - [`AffineSet.sub_tm(ec, h)`](../certflow/sets.py#L54) returns a sub-box as a `TM`, including the rounding of its centre and generators, so the sub-boxes provably cover the set.
+> - [`box_set`](../certflow/sets.py#L81) gives an axis-aligned box. Any $G$ can be used; how the modes are chosen is up to the user.
 
-## 3. NN reachability with DeepZ (Sec. III-D, eqs. 20–22)
+## 3. Network reachability (DeepZ)
 
 The input zonotope is pushed through the network layer by layer:
 
-- **Affine layers:** exact, $Wz + b$ on centre and generators.
-- **ReLU:** a neuron that is never active or always active is exact. A crossing neuron ($l<0<u$) is relaxed as
-  $y = \lambda\hat x + \mu + \mu\,\varepsilon_{\text{new}}$ with $\lambda = u/(u-l)$ and $\mu = -ul/(2(u-l))$.
-  This **appends one new generator per crossing neuron** (eq. 21), so the output (eq. 22) carries $K$ input
-  symbols plus $M$ relaxation symbols.
-- **tanh / sigmoid:** the same idea with slope $\lambda = \min(f'(l), f'(u))$.
+- **Affine layers** act exactly: $Wz + b$ on the centre and the generators.
+- **ReLU:** a neuron that is never or always active is exact. A neuron whose input range $[l, u]$ contains 0 is
+  over-approximated as $y = \lambda\hat x + \mu + \mu\,\varepsilon_{\text{new}}$, with $\lambda = u/(u-l)$ and
+  $\mu = -ul/(2(u-l))$. This is the minimal-area parallelogram, and it **appends one new symbol per relaxed neuron**.
+  The output therefore carries the $K$ input symbols plus one relaxation symbol per relaxed neuron. Relaxation errors
+  keep their own symbol and can partially cancel later.
+- **tanh / sigmoid:** the same construction with slope $\lambda = \min(f'(l), f'(u))$.
+
+The deployed network computes in floating point, e.g. float32. Its own rounding is bounded separately, so the output
+enclosure covers what the deployed network actually returns.
 
 > **In the code**
-> - [`Linear.reach`](../certflow/nn/layers.py#L119), [`ReLU.reach`](../certflow/nn/layers.py#L151) (eq. 20–21), [`_SShaped.reach`](../certflow/nn/layers.py#L194) (tanh/sigmoid), chained by [`Sequential.reach`](../certflow/nn/network.py#L67).
-> - Translators: [`from_torch`](../certflow/nn/network.py#L126), [`from_state_dict`](../certflow/nn/network.py#L143), [`sb3_actor`](../certflow/nn/network.py#L163).
-> - **Beyond the paper:** `ZonoState.dep` bounds the *deployed* network's own rounding (e.g. float32 in torch), so the enclosure covers what the deployed float network outputs ([`exit_identity`](../certflow/nn/layers.py#L81)).
-> - The dispatch-specific wrapper [`DispatchController.reach`](../certflow/power/controller.py#L41) maps the NN output to `[Pg; Vg]`, adds the restoration offset $d$ (Step 8), and **clips $V_g$** to the deployable band with two correlated ReLUs ([`tm.clip`](../certflow/tm.py#L303)), as in Sec. II-B.
+> - [`Linear.reach`](../certflow/nn/layers.py#L119), [`ReLU.reach`](../certflow/nn/layers.py#L151), [`_SShaped.reach`](../certflow/nn/layers.py#L194) (tanh, sigmoid), chained by [`Sequential.reach`](../certflow/nn/network.py#L67). Deployed-arithmetic bound: `ZonoState.dep` and [`exit_identity`](../certflow/nn/layers.py#L81).
+> - Loading a trained network: [`from_torch`](../certflow/nn/network.py#L126), [`from_state_dict`](../certflow/nn/network.py#L143), [`sb3_actor`](../certflow/nn/network.py#L163). Any object implementing `reach(TM) -> TM` can be audited ([`NNReachable`](../certflow/nn/network.py#L23)).
+> - Dispatch controllers: [`DispatchController.reach`](../certflow/power/controller.py#L41) maps the output to `[Pg; Vg]`, adds a restoration offset if one is given (Step 8), and **clips $V_g$** to its deployable band using two correlated ReLUs ([`tm.clip`](../certflow/tm.py#L303)), exactly as the deployed controller does.
 
-## 4. The parameterised power flow $h(z,\varepsilon) = h_0(z) - S(\varepsilon)$ (Sec. II-B eq. 9, Sec. III-E eqs. 23–24)
+## 4. The parameterised power flow
 
-The state is rectangular, $z = (v_{r,ns}, v_{i,ns})$. The residual stacks $P$ at non-slack buses, $Q$ at PQ buses
-and $|V|^2$ at PV buses. In rectangular coordinates all three are **quadratic** in $z$, so:
+The state is written in rectangular coordinates, $z = (v_{r,ns}, v_{i,ns})$: real and imaginary voltages of the
+non-slack buses. The residual stacks three things:
 
-- degree-2 TMs represent them with zero truncation error;
-- the Jacobian is **affine** in $z$ (eq. 24), so its state-derivatives $H_j = \partial J/\partial z_j$ are constant.
+- active-power mismatch at all non-slack buses;
+- reactive-power mismatch at PQ buses;
+- $|V|^2 - V_g^2$ at PV buses.
 
-The uncertainty enters only through the specified values $S(\varepsilon)$ (eq. 23). These are $p_g(\varepsilon) -
-p_d(\varepsilon)$ and $-q_d(\varepsilon)$ per bus, and $V_g(\varepsilon)^{\odot 2}$ at PV buses, all TMs over the
-shared symbols.
+$$h(z, \varepsilon) = h_0(z) - S(\varepsilon) = 0.$$
+
+In rectangular coordinates all three parts of $h_0$ are **quadratic** in $z$, which has two consequences. Degree-2
+Taylor models represent them with no truncation error. And the Jacobian $J = \partial h/\partial z$ is **affine** in
+$z$, so its derivatives $H_j = \partial J/\partial z_j$ are constant matrices. There are no trigonometric functions
+and no angle-wrapping issues.
+
+The uncertainty enters through the specified values $S(\varepsilon)$, all of them Taylor models over the shared
+symbols:
+
+- net active injection $p_g(\varepsilon) - p_d(\varepsilon)$ per bus;
+- $-q_d(\varepsilon)$ per bus;
+- squared voltage setpoints $V_g(\varepsilon)^2$ at PV buses.
 
 > **In the code**
-> - [`PFVerifier.enclose`](../certflow/power/verifier.py#L175) builds $S(\varepsilon)$: `Pbus = Cg·Pg − Cl·Pd`, `Qbus = −Cl·Qd`, `Vset = Cgv·Vg` (lines 194–199). It then calls [`enclose_pf`](../certflow/power/pfcert.py#L43), which stacks `S = [P_ns; Q_pq; Vset²]`.
-> - [`RectPFSystem`](../certflow/power/pf.py#L340) is the system $h_0$:
->   - [`residual`](../certflow/power/pf.py#L420) (eq. 9);
->   - [`jacobian`](../certflow/power/pf.py#L426) (point Jacobian, eq. 24, via [`jac_rect`](../certflow/power/pf.py#L90));
->   - [`jacobian_tm`](../certflow/power/pf.py#L437) (the Jacobian as a TM: $J_0$, linear generators, quadratic coefficients; eq. 26);
+> - [`PFVerifier.enclose`](../certflow/power/verifier.py#L175) builds $S(\varepsilon)$ from the controller's reachable set and the load set (`Pbus`, `Qbus`, `Vset`). [`enclose_pf`](../certflow/power/pfcert.py#L43) stacks `S = [P_ns; Q_pq; Vset²]`.
+> - [`RectPFSystem`](../certflow/power/pf.py#L340) is $h_0$:
+>   - [`residual`](../certflow/power/pf.py#L420);
+>   - [`jacobian`](../certflow/power/pf.py#L426) (point Jacobian via [`jac_rect`](../certflow/power/pf.py#L90));
+>   - [`jacobian_tm`](../certflow/power/pf.py#L437) (the Jacobian as a TM: centre $J_0$, linear coefficients, quadratic coefficients);
 >   - [`hessian_structure`](../certflow/power/pf.py#L478) (the constant $H_j$, built once by [`h_structure`](../certflow/power/pf.py#L211)).
-> - The interface the Krawczyk solver needs is [`AffineJacobianSystem`](../certflow/krawczyk.py#L28). Any implicit model with an affine Jacobian can be plugged in.
+> - The solver only needs the [`AffineJacobianSystem`](../certflow/krawczyk.py#L28) interface, so any implicit model with an affine Jacobian can be plugged in.
 
-## 5. Krawczyk existence and uniqueness (Sec. III-F/G, eqs. 25–29, Algorithm 1)
+## 5. Existence and uniqueness: the Krawczyk test
 
-1. **Linearisation point:** the point PF at the centre of the box, $z_0$ (polar Newton).
-2. **Preconditioner:** $M = J(z_0)^{-1}$.
-3. **Warm step:** $z_1 = z_0 - M h(z_0)$ (paper). **In the code this is a function of $\varepsilon$:**
-   $x_1(\varepsilon) = z_0 - M\,(h_0(z_0) - S(\varepsilon))$ is a TM. Its centre moves with the inputs, which makes
-   the residual radius $corr \ge \sup_\varepsilon |M(h_0(x_1(\varepsilon)) - S(\varepsilon))|$ much smaller than
-   with a point centre.
-4. **Slope majorant (eq. 27):** $K_b(r) = |I - MJ_0| + \sum_k |MJ^{(k)}_{lin}| + \sum_{a,c}|MJ^{(a,c)}_Q| +
-   \mathrm{rem}(r)$, with the **correlated remainder** $\mathrm{rem}(r) = \sum_j |MH_j|\, r_j$ (eq. 28). $M$ is
-   applied before taking absolute values, so sign cancellations survive.
-5. **Monotone inflation (Algorithm 1):** start at $r = 0$ and iterate $r_{new} = (I-K_b(r))^{-1} corr$. Fail as
-   soon as $\rho(K_b) \ge 1$. Accept when $r_{new} \le r$. Then (eq. 29) for every $\varepsilon$ there is exactly one
-   PF solution in $x_1(\varepsilon) \pm r^*$.
+The aim is a box around a centre in which, for every $\varepsilon$, exactly one solution of $h(z,\varepsilon)=0$
+exists.
+
+1. **Linearisation point:** solve the point power flow at the centre of the input box (Newton), giving $z_0$.
+2. **Preconditioner:** $M = J(z_0)^{-1}$. Any $M$ is valid; an inexact inverse only shows up as a larger
+   $|I - MJ_0|$.
+3. **Centre function:** one Newton step taken *symbolically* over the inputs,
+   $x_1(\varepsilon) = z_0 - M\,(h_0(z_0) - S(\varepsilon))$. This centre moves with the inputs, so the residual
+   that remains, $corr \ge \sup_\varepsilon |M(h_0(x_1(\varepsilon)) - S(\varepsilon))|$, is small.
+4. **Slope bound:** over the candidate box $x_1(\varepsilon) \pm r$, bound $|I - MJ|$ entrywise by
+   $$K_b(r) = |I - MJ_0| + \sum_k |MJ^{(k)}_{lin}| + \sum_{a,c}|MJ^{(a,c)}_Q| + \sum_j |MH_j|\, r_j.$$
+   - The middle terms are the Jacobian's own dependence on the inputs (linear and quadratic).
+   - The last term is the growth of the Jacobian over the box. It is kept **correlated**: $M$ is applied before
+     taking absolute values, so sign cancellations are not lost.
+5. **Inflation loop:** start at $r = 0$ and iterate $r_{new} = (I - K_b(r))^{-1}\, corr$, keeping $r$ monotone.
+   Stop with failure as soon as the spectral radius $\rho(K_b) \ge 1$. Accept when $r_{new} \le r$.
+
+When the test succeeds, $\rho(K_b) < 1$ and $r \ge (I-K_b)^{-1} corr$. The Krawczyk operator then maps the box into
+itself and is a contraction there. So **for every input in the box, the power flow has exactly one solution in
+$x_1(\varepsilon) \pm r$**.
 
 > **In the code**: [`krawczyk(system, S, z0)`](../certflow/krawczyk.py#L122)
-> - Centre Newton: [`centre_newton`](../certflow/power/pfcert.py#L37), called from `enclose_pf`.
-> - Steps 2–3 (`M`, `x1`, `corr`): [lines 134–141](../certflow/krawczyk.py#L134).
-> - Step 4: [`_Kb(r)`](../certflow/krawczyk.py#L166).
->   - `c0z = |I − M J0|`, `base_lin` = $\sum_k|MJ_{lin}^{(k)}|$, `base_quad` = $\sum|MJ_Q|$.
->   - `rem2` = $\sum_j |MH_j| r_j$, precomputed per populated column via [`structure_from_triplets`](../certflow/krawczyk.py#L70).
-> - Step 5: [the loop at lines 220–245](../certflow/krawczyk.py#L220). [`specrad`](../certflow/krawczyk.py#L86) is a *rigorous upper bound* on $\rho$ (Collatz–Wielandt), not just an estimate. The Neumann series computes $(I-K_b)^{-1}corr$.
-> - Result: [`KrawczykResult.enclosure()`](../certflow/krawczyk.py#L115) $= x_1(\varepsilon) \pm r^*$ as a TM. `enclose_pf` turns it into full-bus `Vr, Vi` TMs ([`RectPFSystem.state`](../certflow/power/pf.py#L406)) and injections `P, Q` ([`RectPFSystem.injections`](../certflow/power/pf.py#L392)).
-> - **Beyond the paper:**
->   - [`_verify`](../certflow/krawczyk.py#L176) re-checks the accepted float radius *a posteriori* with every rounding of $K_b$ and of the Jacobian evaluation bounded ($\varepsilon$-inflation).
->   - The Jacobian's state-slope may itself depend on $\varepsilon$ (several Hessian terms with bounded scales, see [`AffineJacobianSystem.hessian_structure`](../certflow/krawczyk.py#L50)). The RL mode needs this for uncertain admittances; see [rl_reachability.md](rl_reachability.md).
+> - Step 1: [`centre_newton`](../certflow/power/pfcert.py#L37), called from `enclose_pf`.
+> - Steps 2–3: the start of `krawczyk` (`M`, `x1`, `corr`).
+> - Step 4: [`_Kb(r)`](../certflow/krawczyk.py#L166). `c0z` = $|I - MJ_0|$, `base_lin`, `base_quad`, and the correlated term `rem2`, which uses $|MH_j|$ precomputed per column via [`structure_from_triplets`](../certflow/krawczyk.py#L70).
+> - Step 5: the loop at the end of `krawczyk`. [`specrad`](../certflow/krawczyk.py#L86) returns a rigorous *upper bound* on $\rho$ (Collatz–Wielandt).
+> - Rounding: [`_verify`](../certflow/krawczyk.py#L176) re-checks the accepted radius *a posteriori* with every rounding of $K_b$ and of the Jacobian bounded.
+> - Result: [`KrawczykResult.enclosure()`](../certflow/krawczyk.py#L115) gives $x_1(\varepsilon) \pm r^*$ as a TM. `enclose_pf` converts it to full-bus voltages `Vr, Vi` ([`RectPFSystem.state`](../certflow/power/pf.py#L406)) and injections `P, Q` ([`RectPFSystem.injections`](../certflow/power/pf.py#L392)).
+> - Inputs that also enter the Jacobian, such as uncertain shunt admittances, are supported: the slope term then has several parts with bounded scales ([`AffineJacobianSystem.hessian_structure`](../certflow/krawczyk.py#L50)). The RL modes use this.
 
-## 6. Adaptive domain splitting (Sec. III-H)
+## 6. Splitting the input set
 
-When $\rho \ge 1$, the box is bisected and each half is re-certified with its own linearisation. The direction is
-not the geometrically widest one. It is the one with the largest **residual-quadratic mass**: the per-symbol size of
-$M(h_0(x_1) - S)$, read for free from the residual TM. The certified bounds of the whole box are the union over the
-leaves.
+If the test fails ($\rho \ge 1$), the box is bisected and each half is certified on its own, with its own
+linearisation point. The bounds for the whole set are the union of the bounds of the leaves, which is sound by set
+inclusion.
+
+The direction to bisect is not the widest one. It is the one that contributes most to the residual of the Krawczyk
+step: the per-symbol size of the linear and quadratic coefficients of $M(h_0(x_1) - S)$. That residual drives the
+spectral radius, and the score comes for free from a quantity already computed.
 
 > **In the code**
-> - Score: [`krawczyk` lines 142–144](../certflow/krawczyk.py#L142) (`score` = $\sum$ |linear + quadratic coefficients| of the residual per symbol).
-> - Choice: [`PFVerifier._choose_split`](../certflow/power/verifier.py#L227) → [`split_dims`](../certflow/split.py#L16). This bisects every direction whose score is within `tau = 0.5` of the maximum, up to `m = 4` at once (a refinement of the paper's single-direction bisection), via [`split_children`](../certflow/split.py#L35).
-> - Driver: [`adaptive_split`](../certflow/split.py#L104), serial or parallel over an [`ObjectPool`](../certflow/split.py#L79). The leaf cap `max_leaves` → *abstain* (`Certificate.formal = False`).
-> - Union: [`PFVerifier.certify`](../certflow/power/verifier.py#L232), `Band.union` over the leaves (line 243).
+> - Score: the `score` field of [`KrawczykResult`](../certflow/krawczyk.py#L106).
+> - Direction choice: [`PFVerifier._choose_split`](../certflow/power/verifier.py#L227) → [`split_dims`](../certflow/split.py#L16). This bisects every direction whose score is within `tau = 0.5` of the maximum, up to `m = 4` directions at once, via [`split_children`](../certflow/split.py#L35).
+> - Driver: [`adaptive_split`](../certflow/split.py#L104), serial or parallel over an [`ObjectPool`](../certflow/split.py#L79). When the leaf cap `max_leaves` is reached, the result is marked *not formal* (abstain) rather than guessed.
+> - Union: [`PFVerifier.certify`](../certflow/power/verifier.py#L232).
 
-## 7. Recovering verified bounds (Sec. III-I, eqs. 30–37)
+## 7. Bounding the operational quantities
 
-| Quantity | Paper | In the code |
+The certified state enclosure is pushed through the grid equations. All quantities stay Taylor models over the input
+symbols until the final bound is taken.
+
+| Quantity | How it is bounded | In the code |
 |---|---|---|
-| $\lvert V\rvert$ at PQ buses | eq. 30: correlated $\sqrt{v_r^2+v_i^2}$ | [`VoltageMagnitude.evaluate`](../certflow/power/constraints.py#L142): bounds the correlated TM of $\lvert V\rvert^2$, then takes the monotone square root. PV buses use the clipped setpoint range. |
-| angles | eq. 31: atan2 on the four corners | [`bus_angle_bands`](../certflow/power/constraints.py#L424); differences in [`AngleDifference`](../certflow/power/constraints.py#L439) |
-| $p, q$ injections | eq. 32: $v^\top H v$ | [`inj_rect_tm`](../certflow/power/pf.py#L139) via `RectPFSystem.injections` |
-| $p_g$ | eq. 33: the NN output itself | [`GenActivePower.evaluate`](../certflow/power/constraints.py#L198) |
-| $q_g$, slack $p/q$ | eq. 33: injection + load **interval** | [`GenReactivePower`](../certflow/power/constraints.py#L218), [`SlackPower`](../certflow/power/constraints.py#L247): injection + load as **correlated TMs** (tighter than adding intervals) |
-| branch current | eqs. 34–37: complex-zonotope support function over $\theta$, plus the remainder $\eta_\ell$ | [`zono_imax`](../certflow/power/constraints.py#L292) (512 directions + Lipschitz padding). [`BranchCurrent._end`](../certflow/power/constraints.py#L342) takes the smaller of this and the plain quadratic bound of $\lvert I\rvert^2$. |
+| $\lvert V\rvert$ at PQ buses | the correlated TM of $v_r^2 + v_i^2$ is bounded, then the monotone square root is taken; PV buses use the (clipped) setpoint range | [`VoltageMagnitude.evaluate`](../certflow/power/constraints.py#L142) |
+| voltage angles | `atan2` over the four corners of each bus's $(v_r, v_i)$ box; differences between branch ends | [`bus_angle_bands`](../certflow/power/constraints.py#L424), [`AngleDifference`](../certflow/power/constraints.py#L439) |
+| $p, q$ injections | the quadratic forms $v^\top H v$ evaluated on the state TM | [`inj_rect_tm`](../certflow/power/pf.py#L139) |
+| generator $p_g$ | the controller's reachable output | [`GenActivePower.evaluate`](../certflow/power/constraints.py#L198) |
+| generator $q_g$, slack $p/q$ | injection plus bus load, added as **correlated** TMs | [`GenReactivePower`](../certflow/power/constraints.py#L218), [`SlackPower`](../certflow/power/constraints.py#L247) |
+| branch current | the branch current $I = Y_\ell v$ is an affine complex zonotope plus a small remainder. Its largest magnitude is bounded by the support function over 512 directions, with a Lipschitz pad for the directions in between. The thermal limit is checked in squared form. | [`zono_imax`](../certflow/power/constraints.py#L292), [`BranchCurrent._end`](../certflow/power/constraints.py#L342) (the smaller of this and the plain quadratic bound) |
 
-A box is **certified safe** when the PF is proven on every leaf and every band is inside its limits:
-[`Certificate.safe`](../certflow/power/verifier.py#L94). The default constraint set (eqs. 4–5) is
-[`default_constraints`](../certflow/power/constraints.py#L476). New limit families subclass
+A set is **certified safe** when the power flow is proven on every leaf and every bound lies inside its limit
+([`Certificate.safe`](../certflow/power/verifier.py#L94)). The default limits are
+[`default_constraints`](../certflow/power/constraints.py#L476). A new limit family is a subclass of
 [`Constraint`](../certflow/power/constraints.py#L63).
 
-> **Monte-Carlo check:** [`monte_carlo(ver, cert)`](../certflow/power/validate.py#L39) samples the box, runs the deployed controller and an independent polar Newton PF, and checks every sample against the certified bands.
+> **Independent check:** [`monte_carlo(ver, cert)`](../certflow/power/validate.py#L39) samples the set, runs the deployed controller and a separate polar Newton power flow, and checks every sample against the certified bounds.
 
-## 8. Verified safety restoration (Sec. IV, eqs. 38–39, Algorithms 2–3)
+## 8. Safety restoration
 
-If a band leaves its limits, the dispatch gets a **constant offset** $d = (\Delta p_g, \Delta V_g)$, i.e.
-$\tilde f_\theta(x) = f_\theta(x) + d$. A constant shifts each band without widening it, so the same Krawczyk
-pipeline re-certifies the shifted controller.
+If some bound leaves its limit, the controller output gets a **constant offset**
+$d = (\Delta p_g, \Delta V_g)$:
 
-1. **Sensitivities (Sec. IV-B):** one factorisation of the reduced PF Jacobian at the box centre gives
-   $\partial z/\partial f_\theta = -J^{-1}\partial r/\partial f_\theta$ (implicit function theorem). Every
-   constraint family builds its rows $S_f$ from it.
-2. **QP (eq. 39):** minimise $\lVert\Delta p_g \oslash c_P\rVert^2 + \epsilon\lVert\Delta V_g\oslash c_V\rVert^2 +
-   w_\xi\sum\xi_f$. Rows are normalised by the limit window $\omega_f$, columns by actuator ranges, inside a trust
-   region $\Delta$.
-3. **Algorithm 2 (RESTORE):** certify, compute the exceedance $\nu$, keep the best $d$, stop on SAFE / stall /
-   "range wider than its window" (needs split). Otherwise take a QP step and adapt $\Delta$ from the reduction ratio.
-4. **Algorithm 3 (RESTOREBOXSPLIT):** try the min-norm seed, then the OPF seed. If neither closes, bisect along the
-   direction maximising the L2-aggregated (violation × sensitivity). Recurse with keep-best-ancestor up to
-   MAXSPLIT.
-5. **Deployment (Sec. IV-C):** a piecewise-constant offset controller, where each operating point gets the offset
-   of its leaf.
+$$\tilde f_\theta(x) = f_\theta(x) + d.$$
+
+A constant shifts each bound without widening it, so the same pipeline (Steps 3–7) re-certifies the corrected
+controller.
+
+1. **Sensitivities:** one factorisation of the reduced power-flow Jacobian at the box centre gives
+   $\partial z/\partial f_\theta = -J^{-1}\partial r/\partial f_\theta$ (implicit function theorem). From it, every
+   limit family builds linear rows that say how its bounds move with $d$.
+2. **Quadratic program:** find the smallest offset, with voltage changes preferred over active-power redispatch,
+   that moves every bound inside its limit. Rows are scaled by each limit's window and columns by each actuator's
+   range. The step stays within a trust region. When no offset satisfies all rows, penalised slack variables give
+   the best compromise.
+3. **Iterate (restore one box):** certify, measure the largest limit exceedance, keep the best offset seen, and stop
+   in one of three cases:
+   - the box is safe;
+   - progress stalls;
+   - some bound is wider than its whole limit window, so no constant offset can fit and the box must be split.
+
+   Otherwise take a QP step and adapt the trust region from how well the predicted improvement matched the actual
+   one.
+4. **Split (piecewise offset):** try the minimum-norm starting offset first, then optional reference starting
+   points such as an OPF solution. If no single offset makes the whole box safe, bisect it along the input direction
+   that maximises the aggregated violation × sensitivity and restore each half. Each half starts from its parent's
+   best offset and never ends up worse than it. Recurse up to a maximum depth.
+5. **Deployment:** the result is a piecewise-constant correction. At run time, an operating point gets the offset of
+   the sub-box that contains it.
 
 > **In the code**
-> - Step 1: [`linearize(grid, Vm, th)`](../certflow/power/sensitivity.py#L29). Each constraint's [`restoration_rows`](../certflow/power/constraints.py#L77) returns `RowBlock`s ($S_f$, the right-hand side, the window $\omega_f$).
-> - Step 2: [`Restorer._step`](../certflow/power/restore.py#L160) assembles the rows generically and solves the exact min-norm problem with [`qp_minnorm`](../certflow/power/restore.py#L41) (LDP/NNLS). When that is infeasible, it falls back to the slack-penalised trust-region step [`qp_besteffort`](../certflow/power/restore.py#L72) (eq. 39 with $\xi_f$). `RestoreOptions.eps_vg = 0.1` is the paper's $\epsilon$.
-> - Step 3: [`Restorer.restore_box`](../certflow/power/restore.py#L194) (Algorithm 2: keep-best, stall test, `width_excess` → needs split, trust-region update).
-> - Step 4: [`Restorer.restore_split`](../certflow/power/restore.py#L280) (Algorithm 3). [`split_choice`](../certflow/power/restore.py#L263) gives the violation × sensitivity direction. `seeds={"opf": fn}` supplies the OPF seed. `_AncestorView` handles keep-best-ancestor.
+> - Step 1: [`linearize(grid, Vm, th)`](../certflow/power/sensitivity.py#L29). Each limit family's [`restoration_rows`](../certflow/power/constraints.py#L77) returns `RowBlock`s (sensitivity rows, right-hand side, limit window).
+> - Step 2: [`Restorer._step`](../certflow/power/restore.py#L160) assembles the rows and solves the exact minimum-norm problem ([`qp_minnorm`](../certflow/power/restore.py#L41)), or the slack-penalised trust-region problem ([`qp_besteffort`](../certflow/power/restore.py#L72)). `RestoreOptions.eps_vg` weights voltage against active-power changes.
+> - Step 3: [`Restorer.restore_box`](../certflow/power/restore.py#L194).
+> - Step 4: [`Restorer.restore_split`](../certflow/power/restore.py#L280) and [`split_choice`](../certflow/power/restore.py#L263). Reference starting points: `Restorer(ver, seeds={"opf": fn})`.
 > - Step 5: [`PiecewiseOffsetController`](../certflow/power/restore.py#L361).
 
-## 9. Where the implementation differs from the paper
+## 9. Assumptions
 
-Every difference is **still sound** and was checked by Monte-Carlo.
-
-- **Warm step:** $x_1(\varepsilon)$ is a polynomial in the inputs, not a point $z_1$ (Step 5). This gives a smaller residual radius.
-- **Rounding:** floating-point rounding is bounded everywhere (`certflow.fp`, `KrawczykResult` a-posteriori check, deployed-network rounding).
-- **Correlated sums:** $q_g$ and the slack add injection and load as correlated TMs, not intervals. This was about 10% narrower $q_g$ on PGLib-14/118 in the regression comparison.
-- **Multi-direction splitting:** splitting may bisect up to four residual-dominant directions at once.
-- **Restoration:** sensitivities are re-linearised at the centre of the box being restored. Slack rows include the $V_g$ sensitivity (losses). The OPF seed is a pluggable callable, so there is no IPOPT dependency.
+- **Arithmetic:** IEEE double precision with round-to-nearest. The library functions `atan2`, `tanh`, `cosh` and
+  `exp` are accurate to a few ulp. The tanh and sigmoid relaxations shrink their slope by $(1 - 64u)$ and pad
+  their endpoints by 8 ulp to cover this.
+- **Deployed network:** it computes in the precision given by `deploy_u` (float32 for stable-baselines3 policies,
+  float64 by default).
+- **Scope:** the guarantees cover the steady-state AC power flow. They do not cover dynamics or stability.

@@ -65,6 +65,42 @@ def test_multistep_tree_sound():
         assert (a1, a2) in paths
 
 
+def test_multistep_history_sound():
+    """History tracking (new symbols per step, correlated step change): every simulated action pair is certified,
+    and the tracked tree has no more reachable sequences than the re-boxed one on this example."""
+    from certflow.policy import MultiStepVerifier
+    net = Sequential([Linear(rng.normal(size=(10, 2))), Tanh(), Linear(rng.normal(size=(4, 10)))])
+    shifts = np.array([[0.0, 0.0], [0.3, 0.0], [0.0, 0.3], [-0.3, -0.3]])
+    g_step = np.array([[0.08], [0.08]])                  # common-mode step change: both inputs move together
+
+    def problem(state, U):
+        obs = lambda a, b: Observation(True, AffineSet(U.c + state, U.G).sub_tm(0.5 * (a + b), 0.5 * (b - a)))
+        return dict(observe=obs)
+
+    U0 = AffineSet(np.zeros(2), 0.2 * np.eye(2))
+    extend = lambda U: AffineSet(U.c, np.hstack([U.G, g_step]))
+    MV = MultiStepVerifier(net, problem, lambda s, a: s + shifts[a], steps=2, track="history", extend=extend,
+                           refine="single", max_depth=6)
+    root = MV.verify(np.zeros(2), U=U0)
+    assert root.stats()["max_symbols"] == 3
+    paths = set(root.paths())
+    for _ in range(1000):
+        e = rng.uniform(-1, 1, 3)
+        x1 = U0.point(e[:2])
+        a1 = int(np.argmax(net.forward(x1)))
+        x2 = x1 + g_step[:, 0] * e[2]
+        a2 = int(np.argmax(net.forward(x2 + shifts[a1])))
+        assert (a1, a2) in paths
+
+    def problem_box(state, lo, hi):                       # the same system, re-boxed every step
+        S = AffineSet(0.5 * (lo + hi) + state, np.diag(0.5 * (hi - lo)))
+        return dict(observe=lambda a, b: Observation(True, S.sub_tm(0.5 * (a + b), 0.5 * (b - a))), K=2)
+    MR = MultiStepVerifier(net, problem_box, lambda s, a: s + shifts[a], lambda lo, hi: (lo - 0.08, hi + 0.08),
+                           steps=2, refine="single", max_depth=6)
+    rbox = MR.verify(np.zeros(2), -0.2 * np.ones(2), 0.2 * np.ones(2))
+    assert paths <= set(rbox.paths())
+
+
 def test_robustness_radius_bracket():
     """Certified radius <= falsified radius; no sampled noise below the certified radius changes the action."""
     from certflow.robustness import robustness_radius

@@ -4,6 +4,8 @@
 #   bsub < shell/scripts/wscc9_rl_array.sh
 #   ARGS="--require-n1" bsub < shell/scripts/wscc9_rl_array.sh      # extra options for every element
 # Re-run a single element, e.g. element 9:   bsub -J "wscc9_rl_arr[9]" < shell/scripts/wscc9_rl_array.sh
+# Re-boxing vs history tracking in the multi-step study (elements 7-8):
+#   ARGS="--track both --step-change common" bsub -J "wscc9_rl_arr[7-8]" < shell/scripts/wscc9_rl_array.sh
 #
 # Elements (operating points: python examples/wscc9_actor_reachability.py --list-ops):
 #    1-6   one-step reachability   (--study reach    --ops 0..5)

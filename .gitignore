@@ -5,6 +5,9 @@
 /main.py
 *.pdf
 
+# load-scenario data (large; keep local)
+/examples/EASY_wscc9_scenarios_dense.csv
+
 # examples / tests that need main.py or are not part of the RL case study
 /examples/case9_quickstart.py
 /examples/from_main_py.py

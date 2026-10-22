@@ -1,4 +1,4 @@
-"""Power-flow verification of an NN controller over an input set (the paper's pipeline, Fig. 1).
+"""Power-flow verification of an NN controller over an input set.
 
 For every e-space leaf box:
   1. input zonotope  x(e)                                    (certflow.sets)
@@ -132,7 +132,7 @@ class PFVerifier:
     grid        : :class:`Grid`
     controller  : :class:`DispatchController` (or any object with reach/forward/ng/vg_clip)
     input_set   : :class:`certflow.sets.AffineSet` over the controller input x = [Pd (nl); Qd (nl)] in MW/MVAr
-    constraints : list of :class:`Constraint` (default: the paper's set with the grid's own voltage limits)
+    constraints : list of :class:`Constraint` (default: default_constraints with the grid's own voltage limits)
     warm_start  : (theta, |V|) used to start every centre Newton solve (default: grid.V0, else flat)"""
 
     def __init__(self, grid: Grid, controller: DispatchController, input_set: AffineSet, constraints=None,

@@ -181,18 +181,33 @@ class DiscretePolicyVerifier:
 @dataclass
 class StepNode:
     """One node of the k-step reachability tree: the policy's certified behaviour from ``state`` for every
-    exogenous input in the box [lo, hi], and (if depth < steps) one child per reachable action."""
+    exogenous input of the node's box, and (if depth < steps) one child per reachable action.
+
+    track="rebox":   [lo, hi] is a box of the exogenous input itself.
+    track="history": [lo, hi] is a box in the symbol space of the affine input set ``U`` (x = U.c + U.G e); the
+                     symbols of earlier steps are kept, so ``U`` grows by the new step's symbols at every depth."""
     state: object
     lo: np.ndarray
     hi: np.ndarray
     depth: int
     report: PolicyReport = None
-    children: dict = field(default_factory=dict)       # action -> StepNode
+    children: dict = field(default_factory=dict)       # action (or (action, leaf index)) -> StepNode
+    U: object = None                                     # history mode: the affine input set of this step
+    seconds: float = 0.0                                 # time spent verifying this node (excluding children)
 
     @property
     def safe(self) -> bool:
         """Every reachable action at this node, and recursively in every child, is certified safe."""
         return self.report.safe and all(c.safe for c in self.children.values())
+
+    def input_box(self):
+        """Bounding box of the exogenous input covered by this node."""
+        if self.U is None:
+            return self.lo, self.hi
+        ec, h = 0.5 * (self.lo + self.hi), 0.5 * (self.hi - self.lo)
+        c = self.U.c + self.U.G @ ec
+        r = np.abs(self.U.G) @ h
+        return c - r, c + r
 
     def walk(self):
         yield self
@@ -213,52 +228,117 @@ class StepNode:
                 out += [p for p in c.paths(prefix + (a,)) if p not in out]
         return out
 
+    def stats(self):
+        """Tree size and cost: nodes, policy leaves (boxes), total verification time (s), max symbol count."""
+        nodes = list(self.walk())
+        return dict(nodes=len(nodes), leaves=sum(len(n.report.leaves) for n in nodes),
+                    seconds=sum(n.seconds for n in nodes),
+                    max_symbols=max(len(n.lo) for n in nodes))
+
 
 class MultiStepVerifier:
     """k-step reachability of a discrete policy under exogenous disturbances.
 
-    problem(state, lo, hi)  -> dict(observe=, mask=, check=, K=)   callbacks for :class:`DiscretePolicyVerifier`
-                               over e in [-1, 1]^K, where e maps AFFINELY onto the box [lo, hi]
-                               (x = lo + (e + 1)/2 (hi - lo));  ``check`` judges the next step's safety
+    Two ways to carry the uncertainty from one step to the next (``track``):
+
+    "rebox" (default)  the next step's input is a fresh box: the bounding box of the leaves where the action is
+                       reachable, widened by ``propagate``.  Cheap (the dimension stays K), but the correlation
+                       between steps is dropped.
+        problem(state, lo, hi) -> dict(observe=, mask=, check=, K=)   callbacks for :class:`DiscretePolicyVerifier`
+                                  over e in [-1, 1]^K, where e maps affinely onto the box [lo, hi]
+        propagate(lo, hi)      -> (lo', hi')  box of the next exogenous input given the current one
+
+    "history"          the input of every step is an affine set  x = c + G e  over ALL symbols so far: the next
+                       step keeps the region of the earlier symbols where the action is reachable and appends
+                       NEW symbols for the new uncertainty (``extend``).  The correlation between steps is kept
+                       (the only over-approximation of earlier steps is their leaf boxes in symbol space); the
+                       dimension grows by the number of new symbols every step.
+        problem(state, U)      -> dict(observe=, mask=, check=)       callbacks over U's symbol space
+                                  (e in [-1, 1]^U.K; a sub-box [lo, hi] is U.sub_tm(centre, half-width)).  ``check``
+                                  should judge the action over the NEXT step's input, i.e. extend(U) on the
+                                  sub-box x the full range of the new symbols.
+        extend(U)              -> U'  the same set with the next step's uncertainty appended as new generator
+                                  columns (e.g. AffineSet(U.c, [U.G, G_step]))
+
     transition(state, a)    -> the next state after action a (discrete/controllable part)
-    propagate(lo, hi)       -> (lo', hi')  box of the next exogenous input given the current one
-                               (e.g. widened by the per-step disturbance)
-    merge                   -> "hull": one child per action, over the bounding box of all leaves where the
-                               action is reachable (cheap, conservative); "leaf": one child per (action, leaf)
+    merge                   -> "hull": one child per action, over the bounding box (of the inputs, resp. of the
+                               symbols) of all leaves where the action is reachable; "leaf": one child per
+                               (action, leaf)
 
-    Soundness: the exogenous input is re-boxed at every step (correlation across steps is dropped), so the
-    tree over-approximates every reachable trajectory of length ``steps``."""
+    Soundness: in both modes the tree over-approximates every reachable trajectory of length ``steps``."""
 
-    def __init__(self, policy, problem, transition, propagate, steps=2, merge="hull", **verifier_kwargs):
+    def __init__(self, policy, problem, transition, propagate=None, steps=2, merge="hull", track="rebox",
+                 extend=None, **verifier_kwargs):
+        if track not in ("rebox", "history"):
+            raise ValueError("track must be 'rebox' or 'history'")
+        if track == "rebox" and propagate is None:
+            raise ValueError("track='rebox' needs propagate(lo, hi)")
+        if track == "history" and extend is None:
+            raise ValueError("track='history' needs extend(U)")
         self.policy = policy
         self.problem = problem
         self.transition = transition
         self.propagate = propagate
+        self.extend = extend
         self.steps = int(steps)
         self.merge = merge
+        self.track = track
         self.kw = verifier_kwargs
 
-    def _node(self, state, lo, hi, depth):
+    def _boxes(self, report, a):
+        return [(L.lo, L.hi) for L in report.leaves if L.observed and a in set(int(x) for x in L.actions)]
+
+    def _node(self, state, lo, hi, depth, U=None):
+        import time
         lo = np.asarray(lo, float)
         hi = np.asarray(hi, float)
-        p = self.problem(state, lo, hi)
-        V = DiscretePolicyVerifier(self.policy, p["observe"], p["K"], p.get("mask"), p.get("check"), **self.kw)
-        node = StepNode(state, lo, hi, depth, V.verify())
+        t0 = time.perf_counter()
+        if self.track == "rebox":
+            p = self.problem(state, lo, hi)
+            V = DiscretePolicyVerifier(self.policy, p["observe"], p["K"], p.get("mask"), p.get("check"), **self.kw)
+            node = StepNode(state, lo, hi, depth, V.verify())
+        else:
+            p = self.problem(state, U)
+            V = DiscretePolicyVerifier(self.policy, p["observe"], U.K, p.get("mask"), p.get("check"), **self.kw)
+            node = StepNode(state, lo, hi, depth, V.verify(lo, hi), U=U)
+        node.seconds = time.perf_counter() - t0
         if depth + 1 >= self.steps:
             return node
-        to_phys = lambda e: lo + 0.5 * (np.asarray(e) + 1.0) * (hi - lo)
+        if self.track == "rebox":
+            to_phys = lambda e: lo + 0.5 * (np.asarray(e) + 1.0) * (hi - lo)
+            for a in node.report.reachable_actions():
+                boxes = [(to_phys(bl), to_phys(bh)) for bl, bh in self._boxes(node.report, a)]
+                nxt = self.transition(state, a)
+                if self.merge == "leaf":
+                    for i, (bl, bh) in enumerate(boxes):
+                        node.children[(a, i)] = self._node(nxt, *self.propagate(bl, bh), depth + 1)
+                else:
+                    bl = np.min([b[0] for b in boxes], 0)
+                    bh = np.max([b[1] for b in boxes], 0)
+                    node.children[a] = self._node(nxt, *self.propagate(bl, bh), depth + 1)
+            return node
+        U2 = self.extend(U)
+        r = U2.K - U.K
+        grow = lambda bl, bh: (np.r_[bl, -np.ones(r)], np.r_[bh, np.ones(r)])
         for a in node.report.reachable_actions():
-            boxes = [(to_phys(L.lo), to_phys(L.hi)) for L in node.report.leaves
-                     if L.observed and a in set(int(x) for x in L.actions)]
+            boxes = self._boxes(node.report, a)
             nxt = self.transition(state, a)
             if self.merge == "leaf":
                 for i, (bl, bh) in enumerate(boxes):
-                    node.children[(a, i)] = self._node(nxt, *self.propagate(bl, bh), depth + 1)
+                    node.children[(a, i)] = self._node(nxt, *grow(bl, bh), depth + 1, U2)
             else:
                 bl = np.min([b[0] for b in boxes], 0)
                 bh = np.max([b[1] for b in boxes], 0)
-                node.children[a] = self._node(nxt, *self.propagate(bl, bh), depth + 1)
+                node.children[a] = self._node(nxt, *grow(bl, bh), depth + 1, U2)
         return node
 
-    def verify(self, state, lo, hi) -> StepNode:
+    def verify(self, state, lo=None, hi=None, U=None) -> StepNode:
+        """rebox: verify(state, lo, hi) over the input box;  history: verify(state, U=U[, lo, hi]) over U's
+        symbol box (default [-1, 1]^U.K)."""
+        if self.track == "history":
+            if U is None:
+                raise ValueError("track='history': pass the initial input set U")
+            lo = -np.ones(U.K) if lo is None else lo
+            hi = np.ones(U.K) if hi is None else hi
+            return self._node(state, lo, hi, 0, U)
         return self._node(state, lo, hi, 0)
