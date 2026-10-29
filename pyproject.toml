@@ -22,8 +22,9 @@ dependencies = ["numpy>=1.23", "scipy>=1.9"]
 [project.optional-dependencies]
 pandapower = ["pandapower"]            # certflow.power.from_pandapower
 torch = ["torch"]                      # certflow.nn.from_torch
+plot = ["matplotlib"]                  # MultiStepReport.plot (3D reachable states)
 test = ["pytest"]
-all = ["pandapower", "torch", "pytest"]
+all = ["pandapower", "torch", "matplotlib", "pytest"]
 
 [project.urls]
 Repository = "https://github.com/bastiengiraud/GridBound"

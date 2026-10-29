@@ -1,0 +1,12 @@
+| steps | tracking | time [s] | tree nodes | boxes | symbols per node (max) | reachable sequences | max loading after last action [%] | verdict |
+|---|---|---|---|---|---|---|---|---|
+| 1 | history | 0.3 | 1 | 1 | 1 | 2 | 38.9 | SAFE |
+| 1 | rebox | 0.3 | 1 | 1 | 1 | 2 | 38.9 | SAFE |
+| 2 | history | 1.0 | 3 | 3 | 2 | 8 | 39.9 | SAFE |
+| 2 | rebox | 1.0 | 3 | 3 | 1 | 8 | 39.9 | SAFE |
+| 3 | history | 10.2 | 11 | 12 | 3 | 38 | 57.1 | SAFE |
+| 3 | rebox | 11.4 | 11 | 12 | 1 | 38 | 41.6 | SAFE |
+| 4 | history | 48.3 | 49 | 70 | 4 | 186 | 65.2 | NOT PROVEN |
+| 4 | rebox | 14.0 | 49 | 57 | 1 | 178 | 43.6 | SAFE |
+
+Measured with `python docs/make_figures.py rl3_timing` on Intel64 Family 6 Model 186 Stepping 3, GenuineIntel, single process, nothing else running.

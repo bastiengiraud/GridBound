@@ -1,0 +1,15 @@
+MEASUREMENT-NOISE AUDIT  (noise on 15 of 18 observation entries, relative to each value; exact entries: sgen_q, trafo_tap)
+  noise-free action: idle
+  same action:  guaranteed up to 0.39%   |  smallest noise found that changes it: 0.54% (makes it pick sgen 1 Q=-1 MVAr)
+  safe action:  guaranteed up to 10.00% (whole range)   |  smallest noise found that makes it pick an unsafe action: none found up to 10.00%
+  per observation group (only that group noisy), same action:
+     bus_vm           guaranteed >= 0.47%                 breaks at 0.54%
+     line_loading     guaranteed >= 10.00% (whole range)  no break found
+     trafo_loading    guaranteed >= 10.00% (whole range)  no break found
+     load_p           guaranteed >= 10.00% (whole range)  no break found
+  actions the agent can pick at fixed noise levels:
+     +-  1.00%: idle | trafo 0 tap +1 | trafo 0 tap -1 | sgen 1 Q=-1 MVAr | sgen 1 Q=0 MVAr   all safe
+     +-  2.00%: idle | trafo 0 tap +1 | trafo 0 tap -1 | sgen 1 Q=-1 MVAr | sgen 1 Q=0 MVAr   all safe
+     +-  5.00%: idle | trafo 0 tap +1 | trafo 0 tap -1 | sgen 1 Q=-1 MVAr | sgen 1 Q=0 MVAr   all safe
+     +- 10.00%: idle | trafo 0 tap +1 | trafo 0 tap -1 | sgen 1 Q=-1 MVAr | sgen 1 Q=0 MVAr   all safe
+  time 1.2s

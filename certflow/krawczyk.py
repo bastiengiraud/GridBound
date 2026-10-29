@@ -22,7 +22,7 @@ from typing import Optional, Protocol
 import numpy as np
 
 from .fp import CONFIG, gam, upr
-from .tm import TM, arad, mag, matmul, nt, sub
+from .tm import TM, add, arad, mag, matmul, nt, sub
 
 
 class AffineJacobianSystem(Protocol):
@@ -120,7 +120,7 @@ class KrawczykResult:
 
 
 def krawczyk(system: AffineJacobianSystem, S: TM, z0: np.ndarray, corr_max_m: int = 1700,
-             max_iter: int = 100) -> KrawczykResult:
+             max_iter: int = 100, centre_iters: int = 1) -> KrawczykResult:
     """Prove that F(z) = S(e) has a unique solution near z0 for every e, and enclose it.
 
     S        : TM of the specified right-hand side (m rows) over the symbols e (input + NN-relaxation symbols)
@@ -135,6 +135,10 @@ def krawczyk(system: AffineJacobianSystem, S: TM, z0: np.ndarray, corr_max_m: in
     x0 = TM(z0.copy(), np.zeros((m, Ks)), np.zeros((m, Kq, Kq)), np.zeros(m))
     Lz = matmul(-M, sub(system.residual(x0), S))
     x1 = TM(z0 + Lz[0], Lz[1], Lz[2], np.zeros(m))           # chosen centre FUNCTION p(e) (no remainder)
+    for _ in range(int(centre_iters) - 1):                      # further Newton steps in TM arithmetic: p(e) picks up
+        step = matmul(-M, sub(system.residual(x1), S))           # the quadratic dependence on e, so the residual (and r)
+        x1 = add(x1, step)                                       # drops from O(|e|^2) to O(|e|^3).  Any polynomial is a
+        x1 = TM(x1[0], x1[1], x1[2], np.zeros(m))                # valid centre: keep the polynomial part, drop R.
     dc = matmul(M, sub(system.residual(x1), S))
     corr = np.abs(dc[0]) + arad(dc)                             # sup_e |M (F(p(e)) - S(e))| incl. the constant part
     if CONFIG.rigorous:

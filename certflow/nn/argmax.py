@@ -87,3 +87,33 @@ def ambiguity_split_score(logits: TM, actions, K=None):
         return np.zeros(C.shape[1])
     D = np.abs(C[:, None, :] - C[None, :, :])
     return D.sum((0, 1))
+
+
+def reachable_argmax_heads(logits: TM, heads, mask=None) -> ArgmaxResult:
+    """MultiDiscrete outputs: one independent masked argmax per head (``heads`` = sizes of the consecutive logit
+    blocks).  The reachable JOINT actions (flat indices over the heads, ``np.ravel_multi_index`` order) are the
+    product of the per-head reachable sets -- sound, though it may contain combinations no single input produces.
+    ``mask`` is the concatenated per-head mask."""
+    heads = [int(h) for h in heads]
+    n = int(np.sum(heads))
+    valid = np.ones(n, bool) if mask is None else np.asarray(mask, bool)
+    per, off = [], 0
+    for h in heads:
+        r = reachable_argmax(logits.take(np.arange(off, off + h)), valid[off:off + h])
+        per.append(r.actions)
+        off += h
+    grids = np.meshgrid(*per, indexing="ij")
+    joint = np.ravel_multi_index(tuple(g.ravel() for g in grids), heads) if all(len(p) for p in per) else np.zeros(0, int)
+    lo, hi = dev(logits)
+    return ArgmaxResult(np.sort(joint), odn(logits.c0 + lo), oup(logits.c0 + hi), valid)
+
+
+def argmax_heads_point(logits, heads, mask=None):
+    """Deployed MultiDiscrete action at a point: flat joint index of the per-head masked argmaxes."""
+    logits = np.asarray(logits, float)
+    valid = np.ones(len(logits), bool) if mask is None else np.asarray(mask, bool)
+    idx, off = [], 0
+    for h in heads:
+        idx.append(int(np.argmax(np.where(valid[off:off + h], logits[off:off + h], -np.inf))))
+        off += h
+    return int(np.ravel_multi_index(tuple(idx), [int(h) for h in heads]))

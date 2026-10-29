@@ -1,0 +1,45 @@
+model vs pandapower (max abs deviation per observation block):
+   bus_vm         1.24e-10
+   line_loading   9.66e-08
+   trafo_loading  2.06e-08
+   load_p         0.00e+00
+   sgen_p         0.00e+00
+   sgen_q         0.00e+00
+
+NEXT-STEP SAFETY AUDIT  ->  SAFE
+  loads: 18 uncertain directions, +-2% per load around the snapshot; next load: anywhere in the same box
+  limits: |V| in [0.95, 1.05] pu, loading <= 100%, N-0
+  partition: 1 boxes; SAFE 100.0%  CAN-VIOLATE 0.0%  UNDECIDED 0.0%  PF-NOT-CERTIFIED 0.0%
+  actions the agent can take (share of the load box) and their certified effect:
+    100.00%  idle                               SAFE        |V| 0.9739..1.0300 pu, max loading 95.7%
+  Monte-Carlo cross-check (200 samples): agent's action in certified set 200/200, post-action state inside certified bounds 200/200
+    actions the agent actually took in the samples: 1 of the 1 certified reachable (idle); the others are possible but rare, or bound looseness
+  time 5.4s
+
+NEXT-STEP SAFETY AUDIT  ->  UNSAFE
+  loads: 3 uncertain directions, low-rank: 3 load modes around the snapshot; next load: anywhere in the same box
+  limits: |V| in [0.95, 1.05] pu, loading <= 100%, N-0
+  partition: 2 boxes; SAFE 0.0%  CAN-VIOLATE 100.0%  UNDECIDED 0.0%  PF-NOT-CERTIFIED 0.0%
+  actions the agent can take (share of the load box) and their certified effect:
+    100.00%  idle                               CAN-VIOLATE |V| 0.9653..1.0310 pu, max loading 104.2%
+              loading trafo 0 in [82.8 %, 104.2 %], limit <= 100.0 %
+              CONFIRMED: agent takes 'idle' at a load in the box, then loading trafo 0 = 101.1 % (limit 100.0 %)
+  Monte-Carlo cross-check (200 samples): agent's action in certified set 200/200, post-action state inside certified bounds 200/200
+    actions the agent actually took in the samples: 1 of the 1 certified reachable (idle); the others are possible but rare, or bound looseness
+  time 40.9s
+
+MEASUREMENT-NOISE AUDIT  (noise on 50 of 70 observation entries, relative to each value; exact entries: sgen_p, sgen_q, trafo_tap)
+  noise-free action: idle
+  same action:  guaranteed up to 0.08%   |  smallest noise found that changes it: 0.16% (makes it pick sgen 8 P=0.5 MW)
+  safe action:  guaranteed up to 10.00% (whole range)   |  smallest noise found that makes it pick an unsafe action: none found up to 10.00%
+  per observation group (only that group noisy), same action:
+     bus_vm           guaranteed >= 0.08%                 breaks at 0.16%
+     line_loading     guaranteed >= 2.19%                 breaks at 6.64%
+     trafo_loading    guaranteed >= 10.00% (whole range)  no break found
+     load_p           guaranteed >= 10.00% (whole range)  no break found
+  actions the agent can pick at fixed noise levels:
+     +-  1.00%: idle | trafo 0 tap -1 | trafo 0 tap +1 | trafo 1 tap -1 | trafo 1 tap +1 ... (+6)   all safe
+     +-  2.00%: idle | trafo 0 tap -1 | trafo 0 tap +1 | trafo 1 tap -1 | trafo 1 tap +1 ... (+6)   all safe
+     +-  5.00%: idle | trafo 0 tap -1 | trafo 0 tap +1 | trafo 1 tap -1 | trafo 1 tap +1 ... (+6)   all safe
+     +- 10.00%: idle | trafo 0 tap -1 | trafo 0 tap +1 | trafo 1 tap -1 | trafo 1 tap +1 ... (+6)   all safe
+  time 1.0s

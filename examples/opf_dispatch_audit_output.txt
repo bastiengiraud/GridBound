@@ -1,0 +1,23 @@
+DISPATCH CONTROLLER AUDIT  ->  SAFE
+  load set: 3 loads, 3 uncertain directions; power flow certified (unique solution) on 1 box(es), max rho 0.116
+  certified range over the whole load set vs limit:
+    V            0.97 .. 1.06       pu    limits [0.9, 1.1]   ok
+    Pg          76.53 .. 179.3      MW    limits [10, 300]   ok
+    Qg          -17.3 .. 16.51      MVAr  limits [-300, 300]   ok
+    slack       2.158 .. 80.42      MW/MVAr limits [-300, 300]   ok
+    branch loading  max 70.4% (branch 6)   limit 100%   ok
+  Monte-Carlo cross-check (300/300 converged samples): every sample inside the certified ranges: True; limit families violated by a sample: 0
+  time 2.9s
+
+DISPATCH CONTROLLER AUDIT  ->  UNSAFE
+  load set: 3 loads, 3 uncertain directions; power flow certified (unique solution) on 1 box(es), max rho 0.116
+  certified range over the whole load set vs limit:
+    V            0.97 .. 1.06       pu    limits [0.9, 1.1]   ok
+    Pg          76.53 .. 179.3      MW    limits [10, 300]   ok
+    Qg          -17.3 .. 16.51      MVAr  limits [-300, 8]   CAN BE VIOLATED   worst excess 8.51 MVAr at element 1
+    slack       2.158 .. 80.42      MW/MVAr limits [-300, 300]   ok
+    branch loading  max 70.4% (branch 6)   limit 100%   ok
+  Monte-Carlo cross-check (300/300 converged samples): every sample inside the certified ranges: True; limit families violated by a sample: 1
+  restoration: 1/1 box(es) made certifiably safe with a constant setpoint correction:
+    e in [[-1. -1. -1.], [1. 1. 1.]]: SAFE  dPg = [-0.117 -0.031] MW, dVg = [-0.0363 -0.0218] pu
+  time 5.3s

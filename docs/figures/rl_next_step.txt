@@ -1,0 +1,11 @@
+NEXT-STEP SAFETY AUDIT  ->  SAFE
+  loads: 2 uncertain directions, low-rank: 2 load modes around the snapshot; next load: anywhere in the same box
+  limits: |V| in [0.95, 1.05] pu, loading <= 100%, N-0
+  partition: 63 boxes; SAFE 100.0%  CAN-VIOLATE 0.0%  UNDECIDED 0.0%  PF-NOT-CERTIFIED 0.0%
+  actions the agent can take (share of the load box) and their certified effect:
+     89.06%  idle                               SAFE        |V| 0.9959..1.0357 pu, max loading 65.7%
+     27.34%  sgen 1 Q=-1 MVAr                   SAFE        |V| 0.9884..1.0263 pu, max loading 71.4%
+      0.78%  trafo 0 tap +1                     SAFE        |V| 0.9803..1.0207 pu, max loading 66.7%
+  Monte-Carlo cross-check (400 samples): agent's action in certified set 400/400, post-action state inside certified bounds 400/400
+    actions the agent actually took in the samples: 2 of the 3 certified reachable (idle, sgen 1 Q=-1 MVAr); the others are possible but rare, or bound looseness
+  time 10.9s

@@ -154,7 +154,8 @@ def _outage_bounds(g2, spec_fn, lo, hi, on, rating_mva, measure, max_leaves, ref
         if vlim is not None:
             vm = qty.vmag(enc, allb)
             vlo, vhi = vm.bounds()
-            out.update(v=(vlo, vhi), vs=np.abs(vm.C[:, :K]) / max(vlim[1] - vlim[0], 1e-9))
+            win = np.maximum(np.broadcast_to(np.asarray(vlim[1], float) - np.asarray(vlim[0], float), vlo.shape), 1e-9)
+            out.update(v=(vlo, vhi), vs=np.abs(vm.C[:, :K]) / win[:, None])
         if slack is not None:
             ps = enc.P.take([slack[0]])
             plo, phi = ps.bounds()
@@ -205,12 +206,14 @@ def n1_analysis(grid, spec_fn, lo, hi, outages, rating_mva, monitored=None, meas
     rating_mva : per-branch rating (MVA), inf = unmonitored
     monitored  : branch indices to monitor (default: all with a finite rating)
     refine     : extra bisections per outage spent on boxes where a quantity is undecided (0 = none)
-    vlim       : (vmin, vmax) pu -> also screen |V| at EVERY bus after each outage
+    vlim       : (vmin, vmax) pu, scalars or per-bus arrays -> also screen |V| at EVERY bus after each outage
     slack      : (bus, pmin_mw, pmax_mw) -> also screen the net active injection of the slack bus (generation
                  minus constant-power load at that bus) after each outage"""
     rating_mva = np.asarray(rating_mva, float)
     mon = np.where(np.isfinite(rating_mva))[0] if monitored is None else np.asarray(monitored, int)
-    rep = N1Report(monitored=mon, nbus=grid.N, vlim=None if vlim is None else tuple(map(float, vlim)),
+    if vlim is not None:                                       # scalars or per-bus arrays
+        vlim = tuple(float(v) if np.ndim(v) == 0 else np.asarray(v, float) for v in vlim)
+    rep = N1Report(monitored=mon, nbus=grid.N, vlim=vlim,
                    slack_lim=None if slack is None else (float(slack[1]), float(slack[2])))
     for l in outages:
         if not grid.status[l]:
@@ -226,7 +229,8 @@ def n1_analysis(grid, spec_fn, lo, hi, outages, rating_mva, monitored=None, meas
         r = ContingencyResult(int(l), False, parts is not None, np.full(len(mon), np.nan), np.full(len(mon), np.nan),
                               nleaf, vlim=rep.vlim, slack_lim=rep.slack_lim)
         if parts:
-            pos = np.searchsorted(mon, on)
+            where = {int(b): k for k, b in enumerate(mon)}       # 'monitored' need not be sorted
+            pos = np.array([where[int(b)] for b in on], int)
             r.loading_lo[pos] = np.min([p["l"][0] for p in parts], 0)
             r.loading_hi[pos] = np.max([p["l"][1] for p in parts], 0)
             if vlim is not None:

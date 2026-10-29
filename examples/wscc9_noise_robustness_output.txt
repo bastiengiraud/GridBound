@@ -17,14 +17,14 @@ weights: wscc9_maskableppo_policy_extraction/extracted/wscc9_maskableppo_weights
      +- 2.0%: Pg2-40MW                                                                       all safe
      +- 5.0%: Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW                                      all safe
      +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+55 more, 61 in total) NOT all safe
-  time 17.1s
+  time 73.7s
 
 === MEASUREMENT NOISE at last training state: true delta = [0.008 0.002 0.004], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (123.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
   nominal action: Pg3-5MW
-  same-action radius: certified 1.45%  |  breaking noise: 1.92% (noise found that makes it pick Pg3-10MW)
+  same-action radius: certified 1.45%  |  breaking noise: 1.66% (noise found that makes it pick Pg3-10MW)
   per measurement group (only that group noisy):
      generation (Pg slack, 2, 3)  certified >= 4.69%               breaks at 5.20% -> Pg3-10MW
-     loads (P, Q)                 certified >= 2.81%               breaks at 3.48% -> Pg3-10MW
+     loads (P, Q)                 certified >= 2.81%               breaks at 3.18% -> Pg3-10MW
      PV voltages                  certified >= 20% (whole range)   no break found up to 20%
      line loadings                certified >= 12.38%              breaks at 16.04% -> Pg3-10MW
      transformer loadings         certified >= 15.74%              breaks at 17.21% -> Pg2-40MW
@@ -35,7 +35,7 @@ weights: wscc9_maskableppo_policy_extraction/extracted/wscc9_maskableppo_weights
      +- 2.0%: Pg2-40MW | Pg3-10MW | Pg3-5MW                                                  all safe
      +- 5.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+26 more, 32 in total) all safe
      +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+55 more, 61 in total) NOT all safe
-  time 18.7s
+  time 42.2s
 
 === MEASUREMENT NOISE at heavy load (delta = +0.3): true delta = [0.3 0.3 0.3], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
   nominal action: Pg3-5MW
@@ -53,7 +53,7 @@ weights: wscc9_maskableppo_policy_extraction/extracted/wscc9_maskableppo_weights
      +- 2.0%: idle | Pg2-40MW | Pg2-35MW | Pg2-30MW | Pg2-20MW | Pg2-15MW ... (+10 more, 16 in total) all safe
      +- 5.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+44 more, 50 in total) all safe
      +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+55 more, 61 in total) NOT all safe
-  time 26.8s
+  time 41.5s
 
 === MEASUREMENT NOISE at light load (delta = -0.3): true delta = [-0.3 -0.3 -0.3], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
   nominal action: Pg2-45MW
@@ -71,14 +71,14 @@ weights: wscc9_maskableppo_policy_extraction/extracted/wscc9_maskableppo_weights
      +- 2.0%: Pg2-45MW                                                                       all safe
      +- 5.0%: Pg2-45MW                                                                       all safe
      +-10.0%: Pg2-45MW | Pg2-40MW                                                            all safe
-  time 5.9s
+  time 11.3s
 
 === MEASUREMENT NOISE at line 8-9 open: true delta = [0. 0. 0.], lines (1, 1, 1, 1, 1, 0), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
   nominal action: Pg2-40MW
   same-action radius: certified 2.54%  |  breaking noise: 3.36% (noise found that makes it pick Pg2-45MW)
   per measurement group (only that group noisy):
      generation (Pg slack, 2, 3)  certified >= 8.09%               breaks at 8.46% -> Pg2-45MW
-     loads (P, Q)                 certified >= 5.74%               breaks at 6.80% -> Pg2-45MW
+     loads (P, Q)                 certified >= 5.74%               breaks at 6.58% -> Pg2-45MW
      PV voltages                  certified >= 20% (whole range)   no break found up to 20%
      line loadings                certified >= 11.13%              breaks at 11.58% -> Pg2-45MW
      transformer loadings         certified >= 20% (whole range)   no break found up to 20%
@@ -89,7 +89,7 @@ weights: wscc9_maskableppo_policy_extraction/extracted/wscc9_maskableppo_weights
      +- 2.0%: Pg2-40MW                                                                       all safe
      +- 5.0%: Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW | Pg3-20MW                all safe
      +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+24 more, 30 in total) NOT all safe
-  time 7.8s
+  time 18.8s
 
 === MEASUREMENT NOISE at after +0.5 jump at bus 8: true delta = [0.  0.  0.5], lines (1, 1, 1, 1, 1, 1), Pg2/3 = (163.0, 85.0) MW; noise |eta_i| <= eps*|obs_i| on all 20 measured entries
   nominal action: Pg2-45MW
@@ -107,6 +107,6 @@ weights: wscc9_maskableppo_policy_extraction/extracted/wscc9_maskableppo_weights
      +- 2.0%: Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW | Pg3-10MW | Pg3-5MW                 all safe
      +- 5.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+23 more, 29 in total) all safe
      +-10.0%: idle | Pg2-50MW | Pg2-45MW | Pg2-40MW | Pg2-35MW | Pg2-30MW ... (+55 more, 61 in total) NOT all safe
-  time 19.6s
+  time 39.8s
 
-total time 96.0s
+total time 227.4s

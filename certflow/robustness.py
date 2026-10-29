@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .nn.argmax import reachable_argmax
+from .nn.argmax import argmax_heads_point, reachable_argmax, reachable_argmax_heads
 from .tm import TM, pad_symbols
 
 
@@ -38,44 +38,79 @@ class RadiusResult:
     falsified: float = np.inf        # a concrete noise of this size breaks the requirement (inf: none found)
     counterexample: dict = None      # dict(eps, action, eta) for the falsified radius
     history: list = field(default_factory=list)    # (eps, certified?, actions) evaluated during the bisection
+    nominal: int = None              # the noise-free action (None if the noise-free observation set is ambiguous)
+    eps_max: float = np.inf          # largest noise level tried
 
     @property
     def bracket(self):
         return self.certified, self.falsified
 
 
-def argmax_attack(policy, obs, scale, eps, target, mask=None, n_random=64, seed=0):
-    """Look for eta (|eta| <= eps * scale) with argmax(policy(obs + eta)) != target.  Uses the reachable logits'
-    linear coefficients on the noise symbols to push every competitor's margin down (one candidate per
-    competitor), plus random vertices of the noise box.  Returns (action, eta) or None."""
+def _linear_logits(policy, o, idx, s):
+    """Logits at o and their linear coefficients on the noise symbols (one per noisy entry) over the box o +- s.
+    Over a small box this is the local gradient of the logits w.r.t. the noisy entries (times s)."""
+    n = len(o)
+    x = add_noise(TM(o, np.zeros((n, 0)), np.zeros((n, 0, 0)), np.zeros(n)), s)
+    lg = policy.reach(x)
+    return lg.C[:, : len(idx)]
+
+
+def argmax_attack(policy, obs, scale, eps, target, mask=None, n_random=64, seed=0, bad=None, iters=8, heads=None):
+    """Look for eta (|eta| <= eps * scale) such that the policy picks a BAD action at obs + eta.
+
+    bad(action) -> bool  : concrete test of the picked action (default: action != target).  E.g. "the action is
+                           unsafe at the true state", checked with a plain power flow.
+    Candidates: (1) for every bad competitor b, the vertex of the noise box that pushes (l_b - l_target) up along
+    the logits' sensitivity over the whole box; (2) the same step iterated from the current point with the local
+    sensitivity (a projected sign-gradient attack, ``iters`` steps); (3) ``n_random`` random vertices.
+    Returns (action, eta) for the first success, or None."""
     obs = np.asarray(obs, float)
     s = eps * np.asarray(scale, float)
-    valid = np.ones(policy.out_dim if policy.out_dim else len(policy.forward(obs)), bool) if mask is None else np.asarray(mask, bool)
+    n_out = policy.out_dim if policy.out_dim else len(policy.forward(obs))
+    valid = np.ones(n_out, bool) if mask is None else np.asarray(mask, bool)
+    is_bad = (lambda a: a != target) if bad is None else bad
 
     def act(o):
         lg = policy.forward(o)
+        if heads is not None:
+            return argmax_heads_point(lg, heads, valid)
         return int(np.argmax(np.where(valid, lg, -np.inf)))
 
-    x = add_noise(TM(obs, np.zeros((len(obs), 0)), np.zeros((len(obs), 0, 0)), np.zeros(len(obs))), s)
     idx = np.where(s > 0)[0]
-    lg = policy.reach(x)
-    Cn = lg.C[:, : len(idx)]                       # logit sensitivity to each noise symbol (first symbols = noise)
-    cands = []
-    for b in np.where(valid)[0]:
-        if b == target:
-            continue
-        d = np.sign(Cn[target] - Cn[b])            # decrease (l_target - l_b)
+    if not len(idx):
+        return None
+    if heads is None:                                   # (competitor logit, logit it must beat)
+        pairs = [(b, target) for b in np.where(valid)[0] if b != target and (bad is None or is_bad(int(b)))]
+    else:
+        off = np.r_[0, np.cumsum(heads)[:-1]]
+        tl = [o + i for o, i in zip(off, np.unravel_index(int(target), heads))]
+        pairs = [(o + b, t) for o, h, t in zip(off, heads, tl) for b in range(h) if valid[o + b] and o + b != t]
+    Cn = _linear_logits(policy, obs, idx, s)
+    for b, t in pairs:                                  # (1) one vertex per bad competitor, global sensitivity
         eta = np.zeros_like(obs)
-        eta[idx] = -d * s[idx]
-        cands.append(eta)
-    rng = np.random.default_rng(seed)
+        eta[idx] = np.sign(Cn[b] - Cn[t]) * s[idx]
+        a = act(obs + eta)
+        if is_bad(a):
+            return a, eta
+    small = 1e-3 * s                                    # (2) iterated sign steps with the local sensitivity
+    for b, t in pairs:
+        eta = np.zeros_like(obs)
+        for k in range(iters):
+            cur = act(obs + eta)
+            if is_bad(cur):
+                return cur, eta
+            Cl = _linear_logits(policy, obs + eta, idx, small)
+            step = np.sign(Cl[b] - Cl[t])
+            eta[idx] = np.clip(eta[idx] + step * s[idx] * (2.0 / (k + 2)), -s[idx], s[idx])
+        a = act(obs + eta)
+        if is_bad(a):
+            return a, eta
+    rng = np.random.default_rng(seed)                   # (3) random vertices
     for _ in range(n_random):
         eta = np.zeros_like(obs)
         eta[idx] = rng.choice([-1.0, 1.0], len(idx)) * s[idx]
-        cands.append(eta)
-    for eta in cands:
         a = act(obs + eta)
-        if a != target:
+        if is_bad(a):
             return a, eta
     return None
 
@@ -87,19 +122,19 @@ def bisect_radius(certify, eps_max, tol=1e-3, falsify=None):
     hist = []
     ok, info = certify(eps_max)
     hist.append((eps_max, ok, info))
-    if ok:
-        return RadiusResult(eps_max, np.inf, None, hist)
-    lo, hi = 0.0, eps_max
-    while hi - lo > tol:
-        mid = 0.5 * (lo + hi)
-        ok, info = certify(mid)
-        hist.append((mid, ok, info))
-        lo, hi = (mid, hi) if ok else (lo, mid)
-    res = RadiusResult(lo, np.inf, None, hist)
-    if falsify is not None:                        # smallest breaking eps: bisect the attack between lo and eps_max
+    res = RadiusResult(eps_max if ok else 0.0, np.inf, None, hist, eps_max=eps_max)
+    if not ok:
+        lo, hi = 0.0, eps_max
+        while hi - lo > tol:
+            mid = 0.5 * (lo + hi)
+            ok, info = certify(mid)
+            hist.append((mid, ok, info))
+            lo, hi = (mid, hi) if ok else (lo, mid)
+        res.certified = lo
+    if falsify is not None:                        # smallest breaking eps: bisect the attack between certified and eps_max
         ce = falsify(eps_max)
         if ce is not None:
-            a, b, best = lo, eps_max, (eps_max, ce)
+            a, b, best = res.certified, eps_max, (eps_max, ce)
             while b - a > tol:
                 m = 0.5 * (a + b)
                 c = falsify(m)
@@ -112,26 +147,40 @@ def bisect_radius(certify, eps_max, tol=1e-3, falsify=None):
     return res
 
 
-def robustness_radius(policy, obs_tm, scale, mask=None, require="same", eps_max=0.2, tol=1e-3, obs_point=None):
+def robustness_radius(policy, obs_tm, scale, mask=None, require="same", eps_max=0.2, tol=1e-3, obs_point=None,
+                      bad_action=None, heads=None):
     """Robustness radius of a masked-argmax policy to observation noise |eta| <= eps * scale.
 
-    obs_tm    : TM of the (noise-free) observation -- a constant TM for a single operating point, or a set
-                (e.g. a certified power-flow observation over a load box)
-    require   : "same"   -> the reachable action set is exactly the nominal action {a0}
-                callable -> require(actions: set) -> bool, e.g. "every reachable action is certified safe"
-    obs_point : a concrete observation for the falsification attack (default: obs_tm's centre)"""
-    nominal = reachable_argmax(policy.reach(obs_tm), mask)
+    obs_tm     : TM of the (noise-free) observation -- a constant TM for a single operating point, or a set
+                 (e.g. a certified power-flow observation over a load box)
+    scale      : per-entry noise scale (0 = that entry is exact, e.g. the agent's own setpoints)
+    require    : "same"   -> the reachable action set is exactly the nominal action {a0}
+                 callable -> require(actions: set) -> bool, e.g. "every reachable action is certified safe"
+    bad_action : concrete test bad_action(a) -> bool used for the falsification (upper bound); defaults to
+                 "a != nominal" for require="same".  For a safety requirement pass e.g. "a is unsafe at the true
+                 state" (a plain power flow): the falsified radius is then a real noise vector that makes the agent
+                 pick a really unsafe action.
+    obs_point  : a concrete observation for the falsification attack (default: obs_tm's centre)
+    heads      : MultiDiscrete policy (sizes of the logit blocks); actions are then flat joint indices"""
+    am = (lambda lg: reachable_argmax(lg, mask)) if heads is None else (lambda lg: reachable_argmax_heads(lg, heads, mask))
+    nominal = am(policy.reach(obs_tm))
     a0 = int(nominal.actions[0]) if nominal.certain else None
     pred = (lambda acts: acts == {a0}) if require == "same" else require
 
     def certify(eps):
-        acts = set(int(a) for a in reachable_argmax(policy.reach(add_noise(obs_tm, eps * np.asarray(scale))), mask).actions)
+        acts = set(int(a) for a in am(policy.reach(add_noise(obs_tm, eps * np.asarray(scale)))).actions)
         return pred(acts), sorted(acts)
 
     falsify = None
-    if require == "same" and a0 is not None:
-        o = obs_tm.c0 if obs_point is None else obs_point
-        falsify = lambda eps: argmax_attack(policy, o, scale, eps, a0, mask)
-    res = bisect_radius(certify, eps_max, tol, falsify)
+    o = obs_tm.c0 if obs_point is None else np.asarray(obs_point, float)
+    if a0 is not None and (require == "same" or bad_action is not None):
+        bad = None if require == "same" and bad_action is None else bad_action
+        falsify = lambda eps: argmax_attack(policy, o, scale, eps, a0, mask, bad=bad, heads=heads)
+    if a0 is not None and bad_action is not None and bad_action(a0):     # already broken without any noise
+        ok, info = certify(0.0)
+        res = RadiusResult(0.0, 0.0, dict(eps=0.0, action=a0, eta=np.zeros_like(o)), [(0.0, ok, info)],
+                           eps_max=eps_max)
+    else:
+        res = bisect_radius(certify, eps_max, tol, falsify)
     res.nominal = a0
     return res

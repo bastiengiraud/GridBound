@@ -34,6 +34,7 @@ class VerifierOptions:
     newton_iters: int = 60
     centre_tol: float = 1e-6       # centre PF mismatch above which a leaf is split
     corr_max_m: int = 1700         # correlated Krawczyk remainder up to this state size
+    centre_iters: int = 1          # Krawczyk centre: 1 = affine (the paper's setting), 2 = quadratic (tighter)
 
 
 @dataclass
@@ -198,7 +199,8 @@ class PFVerifier:
         Qbus = add(div(scale(-np.ones(N), Qdb), snv), const(g.sgen_q / sn, Qdb))
         Vset = matmul(g.Cgv, Vg).take(pv)
         enc = enclose_pf(g, Pbus, Qbus, Vset, (self.th0, self.Vm0), centre_tol=self.opt.centre_tol,
-                         corr_max_m=self.opt.corr_max_m, iters=self.opt.newton_iters)
+                         corr_max_m=self.opt.corr_max_m, iters=self.opt.newton_iters,
+                         centre_iters=self.opt.centre_iters)
         leaf.th_s, leaf.Vm_s, leaf.kr = enc.th_s, enc.Vm_s, enc.kr
         if enc.system is None:
             leaf.score = h                                 # centre PF failed -> split the widest direction

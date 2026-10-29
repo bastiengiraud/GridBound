@@ -3,7 +3,7 @@ import importlib
 import time
 import traceback
 
-MODULES = ["tests.test_core", "tests.test_power", "tests.test_shunt_pf", "tests.test_policy", "tests.test_wscc9_data"]
+MODULES = ["tests.test_core", "tests.test_power", "tests.test_shunt_pf", "tests.test_policy", "tests.test_wscc9_data", "tests.test_audit"]
 
 if __name__ == "__main__":
     fails = 0

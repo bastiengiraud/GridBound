@@ -128,7 +128,7 @@ class VoltageMagnitude(Constraint):
     name = "V"
     unit = "pu"
 
-    def __init__(self, grid, vmin, vmax, tol=1e-4, buses=None):
+    def __init__(self, grid, vmin, vmax, tol=0.0, buses=None):
         super().__init__(tol)
         pq, pv = list(grid.pq), list(grid.pv)
         self.pq_buses = pq if buses is None else [b for b in pq if b in set(buses)]
@@ -187,7 +187,7 @@ class GenActivePower(Constraint):
     name = "Pg"
     unit = "pu"
 
-    def __init__(self, grid, tol=1e-3):
+    def __init__(self, grid, tol=0.0):
         super().__init__(tol)
         self.sn = grid.sn
         self.elements = np.arange(grid.ng)
@@ -221,7 +221,7 @@ class GenReactivePower(Constraint):
     name = "Qg"
     unit = "pu"
 
-    def __init__(self, grid, tol=1e-3):
+    def __init__(self, grid, tol=0.0):
         super().__init__(tol)
         self.sn = grid.sn
         self.elements = np.array(grid.pv, int)
@@ -249,7 +249,7 @@ class SlackPower(Constraint):
     name = "slack"
     unit = "pu"
 
-    def __init__(self, grid, tol=1e-3):
+    def __init__(self, grid, tol=0.0):
         super().__init__(tol)
         self.sn = grid.sn
         self.slk = grid.slk
@@ -323,7 +323,7 @@ class BranchCurrent(Constraint):
     name = "branch"
     unit = "pu^2"
 
-    def __init__(self, grid, tol=1e-4, weight=None, hard=True):
+    def __init__(self, grid, tol=0.0, weight=None, hard=True):
         super().__init__(tol)
         r2 = grid.rate2
         self.elements = np.where(np.isfinite(r2))[0]
@@ -441,7 +441,7 @@ class AngleDifference(Constraint):
     name = "angle"
     unit = "rad"
 
-    def __init__(self, grid, tol=1e-6):
+    def __init__(self, grid, tol=0.0):
         super().__init__(tol)
         self.elements = np.where(grid.angle_active)[0]
         self.f = grid.f[self.elements]
@@ -473,7 +473,7 @@ class AngleDifference(Constraint):
         return (lin.dth[self.f] - lin.dth[self.t]) @ d
 
 
-def default_constraints(grid, vmin=None, vmax=None, v_tol=1e-4, lim_tol=1e-3, br_tol=1e-4, branch=True,
+def default_constraints(grid, vmin=None, vmax=None, v_tol=0.0, lim_tol=0.0, br_tol=0.0, branch=True,
                         angle=True):
     """The default constraint set: |V|, gen P, gen Q, slack P/Q, branch current, angle difference."""
     vmin = grid.vmin if vmin is None else vmin

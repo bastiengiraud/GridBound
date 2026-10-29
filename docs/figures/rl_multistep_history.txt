@@ -1,0 +1,24 @@
+MULTI-STEP REACHABILITY AUDIT (3 steps)  ->  SAFE
+  loads: low-rank: all loads together at step 0, then +-3% per step (tracking: history, 3 symbols per node at most)
+  limits: |V| in [0.95, 1.05] pu, loading <= 100%, N-0
+  tree: 11 nodes, 12 boxes; 38 reachable action sequence(s):
+    idle -> idle -> idle
+    idle -> idle -> trafo 0 tap +1
+    idle -> idle -> trafo 0 tap -1
+    idle -> idle -> sgen 1 Q=-1 MVAr
+    idle -> idle -> sgen 1 Q=0 MVAr
+    idle -> trafo 0 tap +1 -> idle
+    idle -> trafo 0 tap +1 -> trafo 0 tap +1
+    idle -> trafo 0 tap +1 -> trafo 0 tap -1
+    idle -> trafo 0 tap +1 -> sgen 1 Q=-1 MVAr
+    idle -> trafo 0 tap +1 -> sgen 1 Q=0 MVAr
+    idle -> trafo 0 tap -1 -> idle
+    idle -> trafo 0 tap -1 -> trafo 0 tap +1
+    ... (+26)
+  certified envelope per step (union over every reachable sequence):
+    step 0 (before any action): |V| 1.0059..1.0230 pu, max loading   35.4%   all limits kept
+    step 1 (after action 1   ): |V| 0.9975..1.0245 pu, max loading   38.9%   all limits kept
+    step 2 (after action 2   ): |V| 0.9883..1.0416 pu, max loading   39.9%   all limits kept
+    step 3 (after action 3   ): |V| 0.9720..1.0431 pu, max loading   57.1%   all limits kept
+  Monte-Carlo (200 trajectories of the deployed agent): action sequence in certified set 200/200, every state inside the certified envelope 200/200, trajectories with a real limit violation 0
+  time 5.5s

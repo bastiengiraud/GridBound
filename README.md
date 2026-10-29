@@ -43,6 +43,8 @@ certflow/                         core: knows nothing about power systems
 │                  MultiStepVerifier (k-step reachability tree)
 ├── sets.py        input zonotopes x = c + G e and e-space sub-boxes
 └── split.py       adaptive splitting + process pool (Windows-safe)
+certflow/audit/                   user-facing layer (pandapower terms): GridModel (obs / act / Limits / LoadUncertainty),
+                                  RLAuditor (next_step, noise_robustness, multi_step + 3D plot), verify_dispatch
 certflow/power/                   application layer: AC power flow
 ├── grid.py        Grid (topology-switchable Ybus), from_pandapower, from_matpower
 ├── pf.py          point Newton PF + rectangular PF as a Krawczyk system (RectPFSystem, uncertain Shunt)
@@ -65,6 +67,8 @@ shell/scripts/     LSF job scripts (setup, tests, case studies); logs go to shel
 
 ## Documentation
 
+- [docs/modes/](docs/modes/README.md): **start here**: every mode (dispatch NN, RL next-step, RL noise, RL multi-step) with its API, how it works, rendered results and figures
+- [docs/user_guide.md](docs/user_guide.md): the `certflow.audit` API in one page (observation blocks, actions, options)
 - [docs/README.md](docs/README.md): overview of the three audit modes and the notation
 - [docs/method.md](docs/method.md): the verification method step by step, with the function that implements each step
 - [docs/rl_reachability.md](docs/rl_reachability.md): auditing an RL agent over load uncertainty (one step, N-1, multi-step)
@@ -82,7 +86,37 @@ pip install -e .              # numpy + scipy
 pip install -e ".[all]"       # + pandapower, torch (only for from_pandapower / from_torch), pytest
 ```
 
-## Quick start
+## Quick start: `certflow.audit`
+
+Describe the grid, the controller and the limits in pandapower terms. Every result is SAFE (proven), UNSAFE (with a
+concrete counterexample) or NOT PROVEN. One page per mode, with rendered results and figures: [docs/modes/](docs/modes/README.md); the API in one page: [docs/user_guide.md](docs/user_guide.md).
+
+```python
+from certflow.audit import GridModel, Limits, RLAuditor, act, obs, verify_dispatch
+
+# an RL agent that reads the grid state and switches taps / sgen setpoints
+model = GridModel(net,
+                  observation=[obs.bus_vm(), obs.line_loading(), obs.trafo_loading(), obs.sgen_p(), obs.trafo_tap()],
+                  actions=[act.idle(), act.shift_tap(0, -1), act.shift_tap(0, +1), act.set_sgen(3, q_mvar=0.5)],
+                  limits=Limits(vm_pu=(0.95, 1.05), max_loading_percent=100))
+model.check_against_pandapower()                       # the model must read the grid like the agent's env
+auditor = RLAuditor(policy, model)                     # torch module or SB3 model
+print(auditor.next_step(net, load_width=0.05))         # mode 1: every action it can take, safe one step later?
+print(auditor.noise_robustness(net))                   # mode 2: how much measurement noise until it misbehaves?
+auditor.multi_step(net, steps=3).plot("reachable.png") # mode 3: certified reachable states over 3 steps, in 3D
+
+# an NN trained on OPF data: loads -> (Pg, Vg)
+print(verify_dispatch(net, opf_model, load_width=0.10, restore=True))
+```
+
+Runnable (outputs saved next to each script as `*_output.txt`):
+`python examples/pandapower_rl_audit.py` (modes 1 and 2 on CIGRE MV with taps and sgens),
+`python examples/multistep_reachability.py` (mode 3 on a small feeder, writes the 3D plot below) and
+`python examples/opf_dispatch_audit.py` (an NN trained on OPF data). What changed in this version: [CHANGELOG.md](CHANGELOG.md).
+
+![certified reachable states over 3 agent steps](examples/multistep_reachability.png)
+
+## Lower-level API
 
 ```python
 from certflow.nn import from_torch                       # or from_state_dict / sb3_actor / layers by hand

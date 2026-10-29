@@ -189,9 +189,14 @@ class Grid:
 def from_pandapower(net, use_exact_ybus=True) -> Grid:
     """Build a :class:`Grid` from a SOLVED pandapower net (``pp.runpp`` must have run).
 
-    Uses pandapower's internal ppc order (identical to the reference implementation).  Generators are
-    ``net.gen`` (PV units; the ext_grid is the slack), loads ``net.load``, static generators ``net.sgen`` are
-    fixed injections.  Branch primitives are read from ppc's Yf/Yt, shunts are the remainder of diag(Ybus)."""
+    Uses pandapower's internal ppc order (identical to the reference implementation).  Generators are the
+    in-service ``net.gen`` (PV units; the ext_grid is the slack), loads the in-service ``net.load``, in-service static
+    generators ``net.sgen`` are fixed injections.  Branch primitives are read from ppc's Yf/Yt, shunts are the
+    remainder of diag(Ybus).  Branch ratings follow pandapower's ``loading_percent`` (see _pandapower_ratings).
+    ``names`` holds the lookups: bus_lookup (pandapower bus -> internal index), branch_element (per branch row:
+    ("line" | "trafo", index)), gen_index, load_index (pandapower indices of the gens / loads, in grid order).
+    Out-of-service branches are not part of pandapower's internal model; to switch them later, build the grid with
+    them in service and use :meth:`Grid.with_branch_status`."""
     ppc = net._ppc["internal"]
     Yb = sp.csr_matrix(ppc["Ybus"])
     bus = np.asarray(ppc["bus"])
@@ -227,17 +232,21 @@ def from_pandapower(net, use_exact_ybus=True) -> Grid:
     num2int = {int(n): i for i, n in enumerate(intnum)}
     bl = net._pd2ppc_lookups["bus"]
     e2i = lambda b: num2int[int(extnum[bl[b]])]
-    gb = np.array([e2i(int(b)) for b in net.gen.bus.values], int)
-    lb = np.array([e2i(int(b)) for b in net.load.bus.values], int)
+    in_svc = lambda tab: (tab.in_service.values.astype(bool) if "in_service" in tab else np.ones(len(tab), bool))
+    g = net.gen[in_svc(net.gen)]                                  # out-of-service units / loads do not exist
+    loads = net.load[in_svc(net.load)]
+    gb = np.array([e2i(int(b)) for b in g.bus.values], int)
+    lb = np.array([e2i(int(b)) for b in loads.bus.values], int)
     Psg = np.zeros(N)
     Qsg = np.zeros(N)
     if hasattr(net, "sgen") and len(net.sgen):
-        sc = np.nan_to_num(net.sgen.scaling.values, nan=1.0) if "scaling" in net.sgen else np.ones(len(net.sgen))
-        for k, b in enumerate(net.sgen.bus.values):
+        sg = net.sgen[in_svc(net.sgen)]
+        sc = np.nan_to_num(sg.scaling.values, nan=1.0) if "scaling" in sg else np.ones(len(sg))
+        for k, b in enumerate(sg.bus.values):
             i = e2i(int(b))
-            Psg[i] += float(np.nan_to_num(net.sgen.p_mw.values[k]) * sc[k])
-            Qsg[i] += float(np.nan_to_num(net.sgen.q_mvar.values[k]) * sc[k])
-    g = net.gen
+            Psg[i] += float(np.nan_to_num(sg.p_mw.values[k]) * sc[k])
+            Qsg[i] += float(np.nan_to_num(sg.q_mvar.values[k]) * sc[k])
+    rate, branch_element = _pandapower_ratings(net, br, rate)
     col = lambda c, d: (np.nan_to_num(g[c].values.astype(float), nan=d) if c in g else np.full(len(g), d))
     eg = net.ext_grid
 
@@ -268,8 +277,9 @@ def from_pandapower(net, use_exact_ybus=True) -> Grid:
             r = pc[(pc.et == et) & (pc.element == el)]
             return ((float(r.cp2_eur_per_mw2.iloc[0]), float(r.cp1_eur_per_mw.iloc[0]), float(r.cp0_eur.iloc[0]))
                     if len(r) else (0.0, 1.0, 0.0))
-        cost = np.array([_c("gen", k) for k in range(len(g))])
+        cost = np.array([_c("gen", k) for k in g.index])
         scost = _c("ext_grid", 0)
+    bus_lookup = {int(b): e2i(int(b)) for b in net.bus.index[in_svc(net.bus)]}
     return Grid(sn=float(net.sn_mva), bus_type=bt, Ysh=np.asarray(Ysh, complex), f=f, t=t, Yff=Yff, Yft=Yft,
                 Ytf=Ytf, Ytt=Ytt, status=np.asarray(status, bool), rate_a=rate, angmin=amn, angmax=amx,
                 gen_bus=gb, gen_pmin=col("min_p_mw", -np.inf), gen_pmax=col("max_p_mw", np.inf),
@@ -278,7 +288,47 @@ def from_pandapower(net, use_exact_ybus=True) -> Grid:
                 slack_lims=(_egl("min_p_mw", -1e9), _egl("max_p_mw", 1e9), _egl("min_q_mvar", -1e9),
                             _egl("max_q_mvar", 1e9)),
                 vmin=vmin, vmax=vmax, V0=V0, gen_cost=cost, slack_cost=scost,
-                names=dict(intnum=intnum.copy()), _Y_exact=(Yb if use_exact_ybus else None))
+                names=dict(intnum=intnum.copy(), bus_lookup=bus_lookup, branch_element=branch_element,
+                           gen_index=np.asarray(g.index), load_index=np.asarray(loads.index)),
+                _Y_exact=(Yb if use_exact_ybus else None))
+
+
+def _pandapower_ratings(net, br_int, rate_int):
+    """Branch ratings in MVA at nominal voltage, computed like pandapower's ``loading_percent``:
+    lines  max_i_ka * df * parallel * sqrt(3) * vn_kv(from bus) * max_loading_percent / 100,
+    trafos sn_mva * df * parallel * max_loading_percent / 100.
+    pandapower itself only writes real ratings into its internal model when ``max_loading_percent`` exists (an
+    OPF-ready net); otherwise RATE_A is a 100 MVA placeholder, which would make every loading check meaningless.
+    Also returns, per internal branch row, the element it comes from: ("line", index) / ("trafo", index) / (other, -1).
+    Falls back to the internal RATE_A (with a warning) if the internal rows cannot be matched to elements."""
+    import warnings
+    ext = np.asarray(net._ppc["branch"])
+    look = net._pd2ppc_lookups.get("branch", {}) or {}
+    rate_ext = ext[:, 5].real.astype(float).copy()
+    elem = [("other", -1)] * ext.shape[0]
+    for tab, (a, b) in look.items():
+        df = net[tab]
+        if b - a != len(df):
+            continue
+        ml = (df.max_loading_percent.values.astype(float) if "max_loading_percent" in df else np.full(len(df), 100.0))
+        ml = np.nan_to_num(ml, nan=100.0)
+        par = df.parallel.values.astype(float) if "parallel" in df else np.ones(len(df))
+        dfac = df.df.values.astype(float) if "df" in df else np.ones(len(df))
+        if tab == "line":
+            vn = net.bus.loc[df.from_bus.values, "vn_kv"].values.astype(float)
+            rate_ext[a:b] = ml / 100.0 * df.max_i_ka.values.astype(float) * dfac * par * vn * np.sqrt(3.0)
+        elif tab == "trafo":
+            rate_ext[a:b] = ml / 100.0 * df.sn_mva.values.astype(float) * dfac * par
+        elif "max_loading_percent" not in df:
+            rate_ext[a:b] = 0.0                            # no rating information: unmonitored, not 100 MVA
+        elem[a:b] = [(tab, int(i)) for i in df.index]
+    keep = ext[:, 10].real > 0                             # pandapower's internal model drops out-of-service branches
+    if int(keep.sum()) != br_int.shape[0]:
+        warnings.warn("from_pandapower: could not match internal branches to elements; using the internal RATE_A "
+                      "(a 100 MVA placeholder unless the net has max_loading_percent columns)")
+        return rate_int, [("other", -1)] * br_int.shape[0]
+    rows = np.where(keep)[0]
+    return rate_ext[rows], [elem[r] for r in rows]
 
 
 # ==================================================================================================

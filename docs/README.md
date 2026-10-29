@@ -11,6 +11,9 @@ study also runs an independent Monte-Carlo check of the certified claims.
 
 ## Documents
 
+Start with [the four modes](modes/README.md): one page each, with the API, how it works and rendered results. The [user guide](user_guide.md) it covers the high-level `certflow.audit` layer (RL modes 1 to 3 and
+dispatch NNs) in pandapower terms. The documents below explain the method and the lower-level building blocks.
+
 | Document | Contents |
 |---|---|
 | [method.md](method.md) | The verification method, step by step: validated arithmetic, network reachability, the Krawczyk existence and uniqueness proof for the AC power flow, bounding of operational quantities, domain splitting, and safety restoration. Each step names the function that implements it. Read this first. |

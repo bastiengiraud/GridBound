@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .nn.argmax import ArgmaxResult, ambiguity_split_score, reachable_argmax
+from .nn.argmax import ArgmaxResult, ambiguity_split_score, reachable_argmax, reachable_argmax_heads
 from .split import bisect
 
 
@@ -107,10 +107,14 @@ class DiscretePolicyVerifier:
     refine        : "safe"   -> split until every reachable action is proven safe (or max_depth)
                     "single" -> additionally split until a single action is reachable
     max_depth     : maximum number of bisections along any path
-    max_leaves    : cap on the number of leaves (the report is then flagged incomplete)"""
+    max_leaves    : cap on the number of leaves (the report is then flagged incomplete)
+    heads         : MultiDiscrete policy: sizes of the consecutive logit blocks (one argmax each); actions are then
+                    flat joint indices (see certflow.nn.argmax.reachable_argmax_heads)
+    stop_when_decided : stop splitting a leaf with a single reachable action whose check is decided (safe or not);
+                    right when ``check_action`` does not depend on the leaf box (e.g. a fixed next-step set)"""
 
     def __init__(self, policy, observe, K, mask=None, check_action=None, refine="safe", max_depth=8,
-                 max_leaves=4000):
+                 max_leaves=4000, heads=None, stop_when_decided=False):
         self.policy = policy
         self.observe = observe
         self.K = int(K)
@@ -119,6 +123,8 @@ class DiscretePolicyVerifier:
         self.refine = refine
         self.max_depth = int(max_depth)
         self.max_leaves = int(max_leaves)
+        self.heads = heads
+        self.stop_when_decided = bool(stop_when_decided)
 
     def evaluate(self, lo, hi, depth=0) -> PolicyLeaf:
         obs = self.observe(lo, hi)
@@ -128,10 +134,17 @@ class DiscretePolicyVerifier:
             return leaf
         logits = self.policy.reach(obs.tm)
         m = self.mask(lo, hi, obs) if callable(self.mask) else self.mask
-        leaf.argmax = reachable_argmax(logits, m)
+        if self.heads is None:
+            leaf.argmax = reachable_argmax(logits, m)
+            amb = leaf.argmax.actions if len(leaf.argmax.actions) > 1 else []
+        else:
+            leaf.argmax = reachable_argmax_heads(logits, self.heads, m)
+            off = np.r_[0, np.cumsum(self.heads)[:-1]]
+            per = np.unravel_index(leaf.argmax.actions, self.heads) if len(leaf.argmax.actions) else []
+            amb = [o + i for o, ii in zip(off, per) for i in np.unique(ii)] if len(leaf.argmax.actions) > 1 else []
         scores = []
-        if len(leaf.argmax.actions) > 1:
-            scores.append(ambiguity_split_score(logits, leaf.argmax.actions, K=self.K))
+        if len(amb) > 1:
+            scores.append(ambiguity_split_score(logits, np.asarray(amb), K=self.K))
         if self.check_action is not None:
             for a in leaf.argmax.actions:
                 c = self.check_action(int(a), lo, hi, obs)
@@ -146,6 +159,9 @@ class DiscretePolicyVerifier:
     def _done(self, leaf):
         if leaf.depth >= self.max_depth:
             return True
+        if (self.stop_when_decided and leaf.observed and len(leaf.actions) == 1
+                and leaf.checks[int(leaf.actions[0])].formal):
+            return True                     # one action, decided: splitting cannot change a box-independent check
         if leaf.status != "SAFE":
             return False
         return not (self.refine == "single" and len(leaf.actions) > 1)

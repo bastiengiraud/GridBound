@@ -41,13 +41,16 @@ def centre_newton(grid, Psp, Qsp, Vpin, warm, shunt: Shunt = None, iters=60):
 
 
 def enclose_pf(grid, P_spec: TM, Q_spec: TM, V_set: TM, warm, shunt: Shunt = None, centre_tol=1e-6,
-               corr_max_m=1700, iters=60) -> PFEnclosure:
+               corr_max_m=1700, iters=60, centre_iters=2) -> PFEnclosure:
     """Certify the PF over the uncertainty carried by the TMs.
 
     P_spec, Q_spec : full-bus (N rows) net specified injections in pu (generation - constant-power load)
     V_set          : PV-bus voltage-magnitude setpoints (rows in grid.pv order)
     warm           : (theta, |V|) Newton start for the linearisation point
-    shunt          : optional uncertain shunt admittances (e.g. admittance loads)"""
+    shunt          : optional uncertain shunt admittances (e.g. admittance loads)
+    centre_iters   : Newton steps (in Taylor-model arithmetic) for the Krawczyk centre function: 1 = affine centre
+                     (as in the paper), 2 = quadratic centre -- a much smaller remainder, which matters for quantities
+                     that amplify it (e.g. currents of short lines with a large admittance)"""
     ns, pq, pv = grid.ns, grid.pq, grid.pv
     Vpin = np.zeros(grid.N)
     Vpin[pv] = V_set[0]
@@ -57,7 +60,11 @@ def enclose_pf(grid, P_spec: TM, Q_spec: TM, V_set: TM, warm, shunt: Shunt = Non
         return enc
     S = concat([P_spec.take(ns), Q_spec.take(pq), mul(V_set, V_set)])
     sysm = RectPFSystem(grid.G, grid.B, ns, pq, pv, Vm_s * np.cos(th_s), Vm_s * np.sin(th_s), shunt=shunt)
-    kr = krawczyk(sysm, S, sysm.z0, corr_max_m=corr_max_m)
+    try:
+        kr = krawczyk(sysm, S, sysm.z0, corr_max_m=corr_max_m, centre_iters=centre_iters)
+    except np.linalg.LinAlgError:                    # singular linearisation (e.g. voltage collapse): not certified
+        enc.system, enc.score = sysm, np.ones(S.C.shape[-1])
+        return enc
     enc.system, enc.kr, enc.ok, enc.rho, enc.score = sysm, kr, kr.ok, kr.rho, kr.score
     if kr.ok:
         enc.Vr, enc.Vi = sysm.state(kr.enclosure())

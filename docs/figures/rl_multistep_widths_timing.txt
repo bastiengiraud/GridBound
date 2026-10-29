@@ -1,0 +1,6 @@
+| step | max voltage band width [pu], history | max voltage band width [pu], rebox | max loading band width [%], history | max loading band width [%], rebox |
+|---|---|---|---|---|
+| 0 | 0.0102 | 0.0102 | 7.0 | 7.0 |
+| 1 | 0.0230 | 0.0230 | 18.2 | 18.2 |
+| 2 | 0.0473 | 0.0473 | 28.0 | 23.5 |
+| 3 | 0.0654 | 0.0653 | 57.1 | 31.4 |

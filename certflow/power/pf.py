@@ -211,9 +211,9 @@ def _gb_key(G, B):
 def h_structure(G, B, ns, pq, pv):
     """Nonzeros of the CONSTANT tensor H[:,:,j] = d(reduced rect Jacobian)/d(state_j), as sparse selectors:
     (rows, inv, vals, cols_u, j_u, m, ShT, ScT) so that |M H_j| and sum_j |M H_j| r_j are O(m nnz)."""
-    ns = np.asarray(ns)
-    pq = np.asarray(pq)
-    pv = np.asarray(pv)
+    ns = np.asarray(ns, dtype=int)
+    pq = np.asarray(pq, dtype=int)
+    pv = np.asarray(pv, dtype=int)
     na = len(ns)
     npq = len(pq)
     m = 2 * na

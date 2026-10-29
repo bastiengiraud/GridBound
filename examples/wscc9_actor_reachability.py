@@ -622,7 +622,7 @@ if __name__ == "__main__":
     t_start = time.time()
     model = WSCC9Model()
     print(actor)
-    print(f"weights: {os.path.relpath(NPZ)}   studies: {', '.join(ARGS.study)}   operating points: {sel}"
+    print(f"weights: {os.path.relpath(NPZ).replace(os.sep, '/')}   studies: {', '.join(ARGS.study)}   operating points: {sel}"
           f"   {'QUICK' if QUICK else 'full'} settings")
     w, margin, depth, nmc = (0.02, 0.0, 5, 100) if QUICK else (0.05, 0.06, 7, 300)
     depth = ARGS.max_depth if ARGS.max_depth is not None else depth
