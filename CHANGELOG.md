@@ -43,7 +43,7 @@ You describe the grid, the controller and the limits in pandapower terms. Every 
 - The policy can be a torch module, a loaded SB3 / sb3-contrib model or a certflow `Sequential`.
   `input_layers=normalizer_layers(mean, var, clip)` adds VecNormalize-style normalisation as exact layers.
 
-**`verify_dispatch`: the paper's use case (an NN trained on OPF data)**
+**`verify_dispatch`: an NN trained on OPF data (loads → generator setpoints)**
 - Accepts a pandapower net, a MATPOWER case or a `Grid`.
 - You declare the network's input and output layout and units (`inputs`, `input_units`, `outputs`, `pg_units`,
   `pg_gens`) instead of reshaping the network.
@@ -82,7 +82,7 @@ You describe the grid, the controller and the limits in pandapower terms. Every 
   skipped. The grid also carries lookups from pandapower buses and branches to internal indices.
 - **Grids without PV generators** (typical distribution grids) crashed in the Krawczyk setup: an empty index list
   was used with a float dtype.
-- **Acceptance tolerances now default to 0.** The paper uses zero tolerance, but the defaults let a "SAFE" verdict
+- **Acceptance tolerances now default to 0.** The previous defaults let a "SAFE" verdict
   exceed a limit by up to 0.1 MW or 1e-4 pu.
 - **`n1_analysis` with unsorted `monitored`** put results on the wrong branches. It also accepts per-bus voltage
   limits now.
@@ -101,7 +101,7 @@ You describe the grid, the controller and the limits in pandapower terms. Every 
   the centre function also captures the quadratic load dependence and the remainder shrinks by about 100×.
   - `enclose_pf` (used by the RL audits and N-1 screening) now defaults to 2. The WSCC-9 reference outputs were
     regenerated with it.
-  - `PFVerifier` keeps the paper's setting (`VerifierOptions.centre_iters=1`), so results still match `main.py`.
+  - `PFVerifier` keeps the affine centre (`VerifierOptions.centre_iters=1`), so its results are unchanged.
   - `verify_dispatch` uses 2.
 - **Lines ending at an open switch.** pandapower puts an empty auxiliary bus there. The loading of such a line is
   now computed exactly from the voltage at its closed end, instead of multiplying the auxiliary bus's remainder by

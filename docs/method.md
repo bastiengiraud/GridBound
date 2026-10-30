@@ -2,8 +2,7 @@
 
 This page is for readers who want the mathematics. To use the package, see [the mode pages](modes/README.md).
 
-The method follows *Verified Safety Layers for AC Surrogates: Reachability-Based Local Verification and Safety
-Restoration* (Giraud, Vorwerk, Chatzivasileiadis). The function names point into the code.
+The function names point into the code.
 
 ## The problem
 
@@ -85,7 +84,14 @@ result is "not certified", never a guess.
 
 Code: `adaptive_split`, `enclose_pf_split`, `DiscretePolicyVerifier`.
 
-## 7. Bounding the limited quantities
+## 7. The observation of an agent
+
+An agent's observation vector is assembled from the certified state: voltages, loadings, flows, injections and the
+loads, all as Taylor models in the **same load symbols**, plus constants for setpoints and taps. It is therefore the
+image of the load set under the power flow, a correlated set, not an independent box per entry. Measurement noise
+adds its own symbols on top. Code: `GridModel.observe_set`, `certflow.audit.obs`.
+
+## 8. Bounding the limited quantities
 
 | Quantity | Bound |
 |---|---|
@@ -97,7 +103,7 @@ Code: `adaptive_split`, `enclose_pf_split`, `DiscretePolicyVerifier`.
 Where a quantity straddles its limit, the box is bisected further to decide it. Code: `certflow.power.constraints`,
 `certflow.power.quantities`, `GridModel.screen`.
 
-## 8. Restoration (dispatch NN)
+## 9. Restoration (dispatch NN)
 
 If a bound crosses a limit, a constant offset d = (ΔPg, ΔVg) is added to the network output. A constant shifts the
 bounds without widening them.
@@ -109,7 +115,7 @@ bounds without widening them.
 
 Code: `Restorer.restore_split`, `PiecewiseOffsetController`.
 
-## 9. Assumptions
+## 10. Assumptions
 
 - **Arithmetic:** IEEE double precision with round-to-nearest. The math library (`atan2`, `tanh`, `exp`, …) is
   accurate to a few ulp.

@@ -587,7 +587,7 @@ class LoadUncertainty:
                   Uncertain sgens ignore their setpoint, so they must not be controlled by actions.
     directions    None: one independent symbol per load (two with independent P, Q).  Fewer symbols make the
                   verification much tighter and faster (box splitting works in few dimensions), so for many loads use
-                  a low-rank set, as in the paper:  "common" (one symbol: all loads move together by +-rel), or a
+                  a low-rank set:  "common" (one symbol: all loads move together by +-rel), or a
                   matrix D (n varying loads x K): load i = snapshot_i * (1 + rel * D[i] e), e in [-1, 1]^K; see
                   :meth:`from_samples` to get D from load data (principal components).
     The symbols are the input directions of the verifier."""

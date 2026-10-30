@@ -1,4 +1,4 @@
-"""Audit an NN that was trained on OPF data to output generator setpoints (the paper's use case).
+"""Audit an NN that was trained on OPF data to output generator setpoints.
 
     python examples/opf_dispatch_audit.py
 
@@ -47,4 +47,4 @@ tight["gen"][1:, 3] = [8.0, -2.0]                        # Qmax of the two PV ge
 print()
 print(verify_dispatch(tight, model, load_width=0.10, restore=True, **layout).summary())
 
-# other load sets: verify_dispatch(..., load_set=certflow.sets.low_rank_load_set(x0, Gdirs, frac))   (paper eq. 19)
+# other load sets: verify_dispatch(..., load_set=certflow.sets.low_rank_load_set(x0, Gdirs, frac))

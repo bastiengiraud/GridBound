@@ -189,7 +189,7 @@ class Grid:
 def from_pandapower(net, use_exact_ybus=True) -> Grid:
     """Build a :class:`Grid` from a SOLVED pandapower net (``pp.runpp`` must have run).
 
-    Uses pandapower's internal ppc order (identical to the reference implementation).  Generators are the
+    Uses pandapower's internal ppc order.  Generators are the
     in-service ``net.gen`` (PV units; the ext_grid is the slack), loads the in-service ``net.load``, in-service static
     generators ``net.sgen`` are fixed injections.  Branch primitives are read from ppc's Yf/Yt, shunts are the
     remainder of diag(Ybus).  Branch ratings follow pandapower's ``loading_percent`` (see _pandapower_ratings).

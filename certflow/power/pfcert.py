@@ -49,7 +49,7 @@ def enclose_pf(grid, P_spec: TM, Q_spec: TM, V_set: TM, warm, shunt: Shunt = Non
     warm           : (theta, |V|) Newton start for the linearisation point
     shunt          : optional uncertain shunt admittances (e.g. admittance loads)
     centre_iters   : Newton steps (in Taylor-model arithmetic) for the Krawczyk centre function: 1 = affine centre
-                     (as in the paper), 2 = quadratic centre -- a much smaller remainder, which matters for quantities
+                     (the default of PFVerifier), 2 = quadratic centre -- a much smaller remainder, which matters for quantities
                      that amplify it (e.g. currents of short lines with a large admittance)"""
     ns, pq, pv = grid.ns, grid.pq, grid.pv
     Vpin = np.zeros(grid.N)

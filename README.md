@@ -142,4 +142,4 @@ effects and the mask are specific to this example.
 The certificates assume double-precision arithmetic with round-to-nearest, and math-library functions (`atan2`,
 `tanh`, `cosh`, `exp`) accurate to a few ulp. The deployed network's own arithmetic (e.g. float32) is covered by an
 explicit error term. The guarantees concern the steady-state AC power flow. See
-[docs/method.md](docs/method.md#9-assumptions).
+[docs/method.md](docs/method.md#10-assumptions).

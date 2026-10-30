@@ -1,4 +1,4 @@
-"""Auditing an NN dispatch controller (loads -> generator setpoints, e.g. an OPF proxy), as in the paper.
+"""Auditing an NN dispatch controller (loads -> generator setpoints, e.g. an OPF proxy).
 
     rep = verify_dispatch(net, model, load_width=0.10)          # pandapower net, MATPOWER case or certflow Grid
     print(rep.summary())

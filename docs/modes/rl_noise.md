@@ -19,7 +19,8 @@ nr.plot("noise.png")
 
 ## How it works
 
-Every noisy entry gets its own bounded noise term: |noise_i| ≤ ε·|value_i|.
+Every noisy entry gets its own bounded noise term, |noise_i| ≤ ε·|value_i|, as a new independent symbol. The grid itself is exact here (the snapshot); with `step_change`, the noise is added on top of the
+[correlated observation set](rl_next_step.md#from-the-load-box-to-a-correlated-observation-set).
 
 - **Guaranteed level:** the largest ε for which the proof holds. It is found by bisection; at each ε the noisy
   observation set is pushed through the agent.

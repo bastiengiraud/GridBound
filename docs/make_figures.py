@@ -29,7 +29,7 @@ def save(name, rep, fig_kw=None):
 
 
 def dispatch():
-    """The paper's use case: an NN trained on OPF data (case9), tight reactive limits, restoration."""
+    """Dispatch NN: an NN trained on OPF data (case9), tight reactive limits, restoration."""
     import torch
 
     from certflow.audit import verify_dispatch

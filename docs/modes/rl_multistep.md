@@ -96,10 +96,30 @@ There are two ways to carry the load set from one step to the next:
 | symbols per step | grow: K + k·r after k steps | stay K |
 | when to use it | when the step change has directions of its own | when it moves along the load set's directions (the usual case) |
 
-**Rebox is never looser here.** In steady state the grid has no memory: at each step it depends only on the current
-loads and the current taps / setpoints, not on how the loads got there.
-- **History** keeps the step symbols separate but uses only their sum, and takes the hull before summing.
-- **Rebox** takes the hull after summing, which is never larger, and keeps the dimension fixed.
+**Why reboxing is enough: the setting is Markov.** What happens at a step depends only on the present, not on how it
+was reached:
+
+- **The grid** is in steady state. Its voltages and flows are a function of the current loads and the current
+  discrete state (taps, setpoints, switch states) only.
+- **The agent** decides from its current observation only. Its earlier actions matter only through the discrete
+  state they left behind.
+- **The loads** at the next step depend only on the current loads: they move by at most ±`step_change` from them,
+  whatever happened before.
+
+So the history matters only through two things: the current loads and the current discrete state. The branch of the
+tree carries the discrete state, and the box carries the loads. Forgetting how the loads got into the box loses
+nothing, and the dimension stays fixed.
+
+It is even never looser than history tracking. History keeps the step symbols separate but uses only their sum, and
+takes the hull before summing. Rebox takes the hull after summing, which is never larger.
+
+**When the Markov property fails, reboxing is no longer exact:**
+
+- **Load changes along their own directions**, or that depend on earlier loads: use `track="history"`, which keeps
+  every step's symbols.
+- **An agent with memory** (a recurrent network, or past observations stacked into its input) is not supported yet.
+- **A grid with its own state** (a battery's state of charge, ramp limits that depend on the previous setpoint) is
+  not supported yet either.
 
 ![history vs rebox](../figures/rl_multistep_compare3d.png)
 

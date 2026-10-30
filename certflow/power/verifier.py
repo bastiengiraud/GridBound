@@ -34,7 +34,7 @@ class VerifierOptions:
     newton_iters: int = 60
     centre_tol: float = 1e-6       # centre PF mismatch above which a leaf is split
     corr_max_m: int = 1700         # correlated Krawczyk remainder up to this state size
-    centre_iters: int = 1          # Krawczyk centre: 1 = affine (the paper's setting), 2 = quadratic (tighter)
+    centre_iters: int = 1          # Krawczyk centre: 1 = affine, 2 = quadratic (tighter)
 
 
 @dataclass

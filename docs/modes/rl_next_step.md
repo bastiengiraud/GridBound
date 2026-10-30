@@ -34,6 +34,34 @@ the certified actions the agent actually took in random samples; a big gap means
 5. **Checks:** for an action not proven safe, a search looks for a load where the agent really takes it and a limit
    is really violated. Random samples check the certified sets and bounds.
 
+### From the load box to a correlated observation set
+
+The uncertainty is only in the loads, written as a few symbols e (the load box). Every other quantity the agent
+observes is computed **as a function of those same symbols**:
+
+- **Loads:** an affine function of e (`load_p`, `load_q`).
+- **Grid quantities:** voltages, loadings, flows and the slack exchange come from the certified power flow, as
+  degree-2 polynomials in e plus a tiny remainder. The remainder is the only part not tied to e (about 1e-5 pu here).
+- **Discrete state:** setpoints, taps and switch states are constants.
+
+So the agent receives the **image of the load box** under the power flow, not a box per observation entry. The
+entries move together the way the physics makes them move: more load means lower voltages and higher loadings,
+never "high load and high voltage" at once. An independent box with the same per-entry ranges would contain such
+impossible combinations, and the agent would look able to take actions it never takes.
+
+On the feeder, with all loads moving together by ±10 % (one load symbol, 18 observation entries):
+
+| Observation set fed to the agent | Symbols | Mean logit width | Actions it can take |
+|---|---|---|---|
+| correlated (what certflow does) | 2 | 10.4 | idle, absorb Q |
+| independent box, same per-entry ranges | 18 | 21.5 | all 5 actions |
+
+In random samples the agent only ever idles. One load symbol adds 0.2 MW to load 0 and removes 0.005 pu from bus 5's
+voltage at the same time; the correlated set keeps that link.
+
+The same correlated observation is used in mode 3 at every step. Mode 2 adds measurement noise on top, as separate
+independent symbols.
+
 ## Example: the feeder, two load directions
 
 The loads of buses 2–3 move together (e0), and so do those of buses 4–5 (e1), each by up to ±35 %.

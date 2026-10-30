@@ -11,7 +11,7 @@ Affine layers act exactly on (c0, C); activations relax each neuron over its rig
 relaxation error keeps its own symbol all the way to the output (it can cancel downstream).  All float
 roundings of this pass are bounded into ``err``; ``dep`` bounds the deployed network's own arithmetic
 (unit roundoff ``ctx.deploy_u``, e.g. float32).  With rigorous mode off (fp.set_rigorous(False)) the classic
-non-rigorous DeepZ formulas are used (identical to the reference implementation).
+non-rigorous DeepZ formulas are used.
 
 To add a new activation, subclass :class:`Layer` and implement ``reach`` (and ``forward``).
 """
@@ -254,7 +254,7 @@ class Sigmoid(_SShaped):
 
 class MinMaxNormalize(Layer):
     """Input layer x -> (x - xmn) / (xmx - xmn + eps)  (fused entry: reads the input TM directly).
-    Formulas identical to the reference implementation, including the deployed-dtype normalization error."""
+    Includes the deployed-dtype normalization error."""
 
     is_entry = True
 

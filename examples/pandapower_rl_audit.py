@@ -105,7 +105,7 @@ auditor = RLAuditor(policy, model, input_layers=norm)
 print()
 print(auditor.next_step(net, load_width=0.02).summary())
 
-# the same with a low-rank load set (as in the paper): 3 principal load modes from load data, +-3 sigma each.
+# the same with a low-rank load set: 3 principal load modes from load data, +-3 sigma each.
 # Here the "data" are synthetic daily profiles; use your own historical load measurements.
 rng = np.random.default_rng(1)
 p0 = net.load.p_mw.values
