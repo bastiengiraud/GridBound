@@ -16,7 +16,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from .fp import CONFIG, ETA, U, gam, odn, oup, upr
+from .fp import CONFIG, U, gam, odn, oup, upr
 
 
 class TM(NamedTuple):

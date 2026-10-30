@@ -352,12 +352,23 @@ def _va(ctx, ids):
     if not ctx.is_set:
         return np.angle(ctx.V[b]) * DEG
     vr, vi = ctx.enc.Vr.take(b), ctx.enc.Vi.take(b)
-    lo, _ = vr.bounds()
+    # rotate every bus by its own centre angle r (exact linear map), so the rotated voltage has a positive real part
+    # even for angles far from 0 (e.g. -150 deg behind a Dyn5 transformer): theta = r + atan(vi' / vr')
+    r = np.arctan2(vi.c0, vr.c0)
+    c, s = np.cos(r), np.sin(r)
+    vr2 = add(scale(c, vr), scale(s, vi))
+    vi2 = sub(scale(c, vi), scale(s, vr))
+    lo, _ = vr2.bounds()
     if np.any(lo <= 0):
-        raise ValueError("bus angle observation needs Re(V) > 0 (|angle| < 90 deg) over the set")
-    inv = compose(vr, lambda x: 1.0 / x, lambda x: -1.0 / x ** 2, lambda a, c: (2.0 / c ** 3, 2.0 / a ** 3))
-    t = compose(mul(vi, inv), np.arctan, lambda x: 1.0 / (1.0 + x * x), _atan_d2)
-    return scale(np.full(len(b), DEG), t)
+        raise ValueError("bus angle observation: a bus angle varies by more than 90 deg over the set; split it")
+    inv = compose(vr2, lambda x: 1.0 / x, lambda x: -1.0 / x ** 2, lambda a, z: (2.0 / z ** 3, 2.0 / a ** 3))
+    t = compose(mul(vi2, inv), np.arctan, lambda x: 1.0 / (1.0 + x * x), _atan_d2)
+    # (c, s) is a rotation by atan2(s, c), which differs from r by a few ulp: covered by the remainder
+    theta = TM(t.c0 + r, t.C, t.Q, t.R + 8 * np.finfo(float).eps * (np.abs(r) + 1.0))
+    tlo, thi = theta.bounds()
+    if np.any(thi > np.pi) or np.any(tlo <= -np.pi):
+        raise ValueError("bus angle observation: an angle crosses +-180 deg over the set (pandapower wraps it)")
+    return scale(np.full(len(b), DEG), theta)
 
 
 def _loading(kind):
@@ -844,6 +855,10 @@ class GridModel:
         for k, i in enumerate(self.gen_index):
             self.Cg[self._bus_lookup[int(n.gen.at[i, "bus"])], k] = 1.0 / sn
         self.Cgv = (self.Cg > 0) / np.maximum((self.Cg > 0).sum(1, keepdims=True), 1)
+        # buses that carry an element (load, sgen, gen, uncertain injection) or the slack: losing them is loss of supply
+        self._carrier = (np.abs(self.Mp).sum(1) + np.abs(self.Mq).sum(1) + np.abs(self.Csg).sum(1)
+                         + np.abs(self.Cg).sum(1)) > 0
+        self._carrier[g0.slk] = True
         eg = n.ext_grid[n.ext_grid.in_service.astype(bool)] if "in_service" in n.ext_grid else n.ext_grid
         self.v_slack = float(eg.vm_pu.iloc[0])
         self.va_slack = np.deg2rad(float(eg.va_degree.iloc[0])) if "va_degree" in eg else 0.0
@@ -1008,7 +1023,27 @@ class GridModel:
             st[self._branch_row[("trafo", i)]] = state.trafo_on[k]
         if outage is not None:
             st[self._branch_row[("line", outage)]] = False
-        return g if (st == g.status).all() else g.with_branch_status(st)
+        g2 = g if (st == g.status).all() else g.with_branch_status(st)
+        return self._drop_dead(g2)
+
+    def _drop_dead(self, g):
+        """Mark buses cut off from the slack that carry nothing (no load, sgen, gen, uncertain injection) as isolated
+        (bus_type 4), so they leave the power flow -- e.g. pandapower's empty auxiliary bus behind an open line switch
+        once that line is switched off.  A cut-off part that does carry something stays, and makes the grid islanded
+        (loss of supply counts as a violation)."""
+        n, lab = g.components()
+        if n == 1:
+            return g
+        bt = g.bus_type.copy()
+        for c in set(lab) - {lab[g.slk]}:
+            members = np.where(lab == c)[0]
+            if not self._carrier[members].any():
+                bt[members] = 4
+        return g if (bt == g.bus_type).all() else replace(g, bus_type=bt, _Y_exact=None)
+
+    def dead_buses(self, state, outage=None):
+        """Internal indices of the buses that are de-energised and empty in ``state`` (see :meth:`_drop_dead`)."""
+        return set(np.where(self.grid(state, outage).bus_type == 4)[0].tolist())
 
     def fixed_injections(self, state):
         """Bus injections (pu) that do not depend on the uncertain set: sgens and gens."""
@@ -1084,6 +1119,10 @@ class GridModel:
         L = self.limits
         buses = list(self._bus_lookup) if L.buses is None else list(L.buses)
         vlo, vhi = self.v_limits()
+        dead = self.dead_buses(state, outage)              # de-energised empty buses have no voltage to check
+        if dead:
+            keep = [k for k, b in enumerate(buses) if self._bus_lookup[b] not in dead]
+            buses, vlo, vhi = [buses[k] for k in keep], vlo[keep], vhi[keep]
         ml = self.max_loading()
         lines = [i for k, i in enumerate(self.line_index) if state.line_on[k] and i != outage]
         trafos = [i for k, i in enumerate(self.trafo_index) if state.trafo_on[k]]
@@ -1215,7 +1254,8 @@ class GridModel:
         for k, it, r in ref:
             a, b = offsets[id(it)]
             mine = (sim["obs"][a:b] - np.asarray(it.offset, float)) / np.asarray(it.scale, float)
-            out[k] = float(np.max(np.abs(mine - np.asarray(r, float)))) if len(r) else 0.0
+            d = np.abs(mine - np.asarray(r, float))              # pandapower leaves out-of-service elements NaN
+            out[k] = float(np.nanmax(d)) if np.isfinite(d).any() else 0.0
         if verbose:
             print("model vs pandapower (max abs deviation per observation block):")
             for k, v in out.items():

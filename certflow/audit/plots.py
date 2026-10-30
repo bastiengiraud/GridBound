@@ -8,12 +8,8 @@ STATUS_COLOR = {"SAFE": "#2e8b57", "CAN-VIOLATE": "#d62728", "UNDECIDED": "#ff9f
 
 
 def _plt():
-    import matplotlib
-    if matplotlib.get_backend().lower() not in ("agg",) and not matplotlib.is_interactive():
-        try:
-            matplotlib.use("Agg")
-        except Exception:
-            pass
+    # never switch the backend here: forcing "Agg" disabled inline figures in notebooks for the whole session.
+    # Without a display, matplotlib already falls back to a non-interactive backend, and savefig works with any.
     import matplotlib.pyplot as plt
     return plt
 

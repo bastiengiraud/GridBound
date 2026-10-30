@@ -7,9 +7,10 @@
 Starting from every load in the initial set, the agent acts; the loads then change by up to ``step_change`` per step
 and the agent acts again, ``steps`` times.  Every branch of the resulting tree of action sequences is certified:
 which actions the agent can take at each step, and certified bounds on every bus voltage and branch loading after
-each action.  The loads are tracked with new symbols per step (no re-boxing), so the correlation between steps is
-kept.  The per-step envelopes (union over all branches of the tree) are what the plot shows, together with
-Monte-Carlo trajectories of the deployed agent, which must lie inside them.
+each action.  By default (``track="rebox"``) every step works in the initial set's own load directions, with the box
+widened by the step change, so the dimension stays fixed; ``track="history"`` adds new symbols per step instead (needed
+when the step change has directions of its own).  The per-step envelopes (union over all branches of the tree)
+are what the plot shows, together with Monte-Carlo trajectories of the deployed agent, which must lie inside them.
 """
 from __future__ import annotations
 
@@ -104,10 +105,7 @@ class MultiStepReport:
         """3D view of the certified envelopes: x = element (bus / branch), y = step, z = value.  Each step is a
         translucent band between the certified lower and upper bound; dots are Monte-Carlo trajectories; the
         grey planes are the limits.  Saves to ``file`` if given; returns the matplotlib figure."""
-        import matplotlib
-        if not show:
-            matplotlib.use("Agg", force=False)
-        import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt         # the backend is left alone (forcing "Agg" broke notebook display)
 
         fig = plt.figure(figsize=(7.5 * len(quantities), 6.5))
         for q_i, q in enumerate(quantities):
@@ -176,8 +174,6 @@ def draw_3d(ax, rep, q, zlim=None, title=None):
 def compare_3d(reports, file=None, quantities=("vm", "loading")):
     """The 3D view of several runs side by side (columns: runs, rows: quantities), on the same z-axis per row, e.g.
     ``compare_3d({"history": rep_h, "rebox": rep_r}, "compare.png")``."""
-    import matplotlib
-    matplotlib.use("Agg", force=False)
     import matplotlib.pyplot as plt
     names = list(reports)
     fig = plt.figure(figsize=(7.0 * len(names), 5.6 * len(quantities)))

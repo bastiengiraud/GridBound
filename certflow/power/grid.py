@@ -179,11 +179,18 @@ class Grid:
         return replace(self, status=status.copy(), _Y_exact=(self._Y_exact if same else None))
 
     def islanded(self) -> bool:
-        """True if the in-service network is not connected."""
+        """True if the in-service network is not connected.  Buses marked isolated (bus_type 4: de-energised, carrying
+        nothing, see :meth:`components`) are ignored, as pandapower does."""
+        n, lab = self.components()
+        live = self.bus_type != 4
+        return len(np.unique(lab[live])) > 1
+
+    def components(self):
+        """(number, label per bus) of the connected components of the in-service network."""
         from scipy.sparse.csgraph import connected_components
         on = np.where(self.status)[0]
         A = sp.csr_matrix((np.ones(len(on)), (self.f[on], self.t[on])), shape=(self.N, self.N))
-        return connected_components(A, directed=False)[0] > 1
+        return connected_components(A, directed=False)
 
 
 def from_pandapower(net, use_exact_ybus=True) -> Grid:

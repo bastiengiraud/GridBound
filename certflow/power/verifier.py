@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..fp import odn, oup
 from ..sets import AffineSet
 from ..split import adaptive_split, split_children, split_dims
 from ..tm import TM, add, const, div, matmul, pad_symbols, scale, sub

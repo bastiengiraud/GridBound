@@ -75,6 +75,17 @@ You describe the grid, the controller and the limits in pandapower terms. Every 
 
 ### Fixes
 
+- **Switching off a line behind an open switch** (pandapower's empty auxiliary bus) was treated as the grid splitting:
+  the power flow failed and the action or outage was wrongly reported as unsafe. Empty cut-off buses are now dropped,
+  as pandapower does; a cut-off part with loads or generation still counts as islanding.
+- **`obs.bus_va`** failed for angles beyond ±90°, e.g. behind phase-shifting transformers (YNd5). Each bus is now
+  rotated by its own centre angle, which is exact for any angle.
+- **Noise radius:** the bisection now checks that the requirement holds without noise, instead of reporting a vacuous
+  "guaranteed up to 0 %". The breaking noise vector is reported relative to each entry's scale (entries mix pu, %
+  and MW).
+- **Plots** no longer switch matplotlib's backend, which disabled inline figures in notebooks.
+- `check_against_pandapower` ignores the entries pandapower leaves undefined (out-of-service elements).
+
 - **`from_pandapower` ratings.** pandapower writes real branch ratings into its internal model only when
   `max_loading_percent` exists; otherwise it writes a 100 MVA placeholder, which was used as the rating. Ratings
   are now computed from the element tables, exactly like pandapower's `loading_percent`.

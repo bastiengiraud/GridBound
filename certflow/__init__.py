@@ -10,6 +10,8 @@ Core (application-agnostic):
     certflow.split     adaptive splitting + Windows-safe process pool
 Application:
     certflow.power     AC power flow: grid, controllers, verifier, pluggable constraints, restoration
+    certflow.audit     START HERE: audits in pandapower terms -- GridModel + RLAuditor (next_step, noise_robustness,
+                       multi_step) for RL agents, verify_dispatch for NN dispatch controllers (docs/modes/)
 """
 from . import fp, krawczyk, nn, policy, robustness, sets, split, tm
 from .tm import TM

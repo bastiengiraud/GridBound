@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from ..fp import CONFIG, odn, oup
-from ..tm import TM, add, arad, bounds, dev, div, matmul, matmul_sparse, mul, sub
+from ..tm import TM, add, arad, bounds, dev, matmul, matmul_sparse, mul, sub
 from .pf import vmag2_tm
 
 BIG = 1e9

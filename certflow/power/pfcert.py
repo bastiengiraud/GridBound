@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..krawczyk import krawczyk
-from ..tm import TM, bounds, concat, mul
+from ..tm import TM, concat, mul
 from .pf import RectPFSystem, Shunt, newton
 
 

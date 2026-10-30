@@ -187,3 +187,48 @@ def test_multi_step_rebox_not_looser_than_history():
         for n in Er.lo:
             assert Er.lo[n] >= Eh.lo[n] - 1e-9 and Er.hi[n] <= Eh.hi[n] + 1e-9, n
     assert max(len(n.lo) for n in r.tree.walk()) == 1
+
+
+def test_switching_off_line_behind_open_switch_is_not_islanding():
+    """pandapower puts an empty auxiliary bus behind an open line switch; switching that line off must not count as
+    the grid splitting (the bus is dropped, as pandapower does), while a real island still does."""
+    if not _have_pandapower():
+        return
+    import copy
+
+    import pandapower as pp
+    from certflow.audit import LoadUncertainty
+    net = _cigre(0)
+    m = _model(net)
+    st = m.state_from_net(net)
+    off = st.with_("line_on", m.line_pos(12), False)            # line 12 ends at an open switch (bus 7)
+    assert not m.grid(off).islanded()
+    assert m.simulate(off, LoadUncertainty(rel=0.0).build(m, net).c) is not None
+    net2 = copy.deepcopy(net)
+    net2.line.loc[12, "in_service"] = False
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pp.runpp(net2, numba=False)
+    assert max(m.check_against_pandapower(net2, verbose=False).values()) < 1e-6
+    assert m.screen(off, LoadUncertainty(rel=0.03, directions="common").build(m, net)).formal
+    assert m.grid(st.with_("line_on", m.line_pos(0), False)).islanded()   # the feeder head: a real island
+
+
+def test_bus_angle_sound_behind_phase_shifting_trafo():
+    """Bus angles far from 0 (the YNd5 transformer puts the LV side near -98 deg) are enclosed soundly."""
+    if not _have_pandapower():
+        return
+    import pandapower.networks as pn
+    from certflow.audit import GridModel, LoadUncertainty, act, obs
+    net = pn.example_simple()
+    m = GridModel(net, [obs.bus_va()], [act.idle()])
+    assert max(m.check_against_pandapower(verbose=False).values()) < 1e-8
+    st = m.state_from_net(net)
+    U = LoadUncertainty(rel=0.10).build(m, net)
+    ok, T, _ = m.observe_set(st, U, -np.ones(U.K), np.ones(U.K))
+    assert ok
+    lo, hi = T.bounds()
+    assert lo.min() < -90                                      # past -90 deg: the case a plain atan cannot handle
+    for e in np.random.default_rng(0).uniform(-1, 1, (50, U.K)):
+        va = m.simulate(st, U.point(e))["obs"]
+        assert np.all(va >= lo - 1e-9) and np.all(va <= hi + 1e-9)

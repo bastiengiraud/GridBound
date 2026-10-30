@@ -1,7 +1,7 @@
 """End-to-end power-flow verification on MATPOWER case9 (no pandapower needed)."""
 import numpy as np
 
-from certflow.power import (BranchCurrent, Restorer, case9, default_constraints, from_matpower, monte_carlo)
+from certflow.power import (Restorer, case9, default_constraints, from_matpower, monte_carlo)
 from tests.helpers import case9_verifier
 
 

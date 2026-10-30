@@ -2,7 +2,7 @@
 
 **`certflow`: an independent safety auditor for learned power-grid controllers.**
 
-The result is a mathematical certificate, not a statistical estimate. It holds for every operating condition 
+The result is a mathematical certificate, not a statistical estimate. It holds for every operating condition
 in a given set, with floating-point rounding included.
 
 What it can audit:
@@ -30,14 +30,15 @@ Operation*](https://arxiv.org/abs/2608.20914) (Papadopoulos, Tsaousoglou, Vorwer
 
 ## Install
 
-Requires Python ≥ 3.9. The core depends only on numpy and scipy.
+Requires Python ≥ 3.9. The core depends only on numpy and scipy. Tested with Python 3.10, numpy 2.2, scipy 1.15,
+pandapower 3.5, torch 2.14 and matplotlib 3.10.
 
 ```bash
 git clone https://github.com/bastiengiraud/GridBound.git
 cd GridBound
 python -m venv .venv && source .venv/bin/activate
 pip install -e .              # numpy + scipy
-pip install -e ".[all]"       # + pandapower, torch (only for from_pandapower / from_torch), pytest
+pip install -e ".[all]"       # + pandapower, torch, matplotlib, pytest (for certflow.audit, from_torch, plots, tests)
 ```
 
 ## Quick start: `certflow.audit`
@@ -134,8 +135,6 @@ observed quantities are power-flow outputs. The model reproduces the observation
 float32 precision. The generic parts (`enclose_pf`, `Shunt`, `quantities`, `n1_analysis`, `DiscretePolicyVerifier`,
 `MultiStepVerifier`, `robustness_radius`) apply to other grids and agents. Only the observation layout, the action
 effects and the mask are specific to this example.
-
-
 
 ## Assumptions
 

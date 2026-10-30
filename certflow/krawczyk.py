@@ -22,7 +22,7 @@ from typing import Optional, Protocol
 import numpy as np
 
 from .fp import CONFIG, gam, upr
-from .tm import TM, add, arad, mag, matmul, nt, sub
+from .tm import TM, add, arad, matmul, sub
 
 
 class AffineJacobianSystem(Protocol):

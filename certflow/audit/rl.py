@@ -142,31 +142,37 @@ class NoiseReport:
     def summary(self) -> str:
         s = self.setup
         pct = lambda v: f"{100 * v:.2f}%"
+
+        def guar(r, prefix="up to "):
+            if not getattr(r, "holds_at_zero", True):
+                return "not guaranteed even without noise"
+            return f"{prefix}{pct(r.certified)}" + (" (whole range)" if r.certified >= r.eps_max else "")
+
         L = [f"MEASUREMENT-NOISE AUDIT  (noise on {s['n_noisy']} of {s['n_obs']} observation entries, "
              f"{'relative to each value' if s['relative'] else 'absolute'}; exact entries: {s['exact']})",
              f"  noise-free action: {self.nominal}"]
         r = self.same
         fal = (f"{pct(r.falsified)} (makes it pick {s['label'](r.counterexample['action'])})"
                if np.isfinite(r.falsified) else f"none found up to {pct(r.eps_max)}")
-        L.append(f"  same action:  guaranteed up to {pct(r.certified)}{' (whole range)' if r.certified >= r.eps_max else ''}"
-                 f"   |  smallest noise found that changes it: {fal}")
+        L.append(f"  same action:  guaranteed {guar(r)}   |  smallest noise found that changes it: {fal}")
         if self.safe is not None:
             r = self.safe
             fal = (f"{pct(r.falsified)} (makes it pick {s['label'](r.counterexample['action'])}, which violates a limit)"
                    if np.isfinite(r.falsified) else f"none found up to {pct(r.eps_max)}")
             if r.falsified == 0.0:
                 fal = "0% -- the noise-free action already violates a limit"
-            L.append(f"  safe action:  guaranteed up to {pct(r.certified)}{' (whole range)' if r.certified >= r.eps_max else ''}"
-                     f"   |  smallest noise found that makes it pick an unsafe action: {fal}")
+            L.append(f"  safe action:  guaranteed {guar(r)}   |  smallest noise found that makes it pick an unsafe action: {fal}")
             if 0.0 < r.falsified < np.inf:
-                eta = r.counterexample["eta"]
-                top = np.argsort(-np.abs(eta))[:5]
-                L.append("     largest entries of that noise: " +
-                         ", ".join(f"{self.names[k]} {eta[k]:+.3g}" for k in top if eta[k] != 0))
+                eta = np.asarray(r.counterexample["eta"], float)
+                sc = np.asarray(s.get("scale", np.ones_like(eta)), float)
+                rel = np.where(sc > 0, eta / np.where(sc > 0, sc, 1.0), 0.0)   # noise per unit of its own scale:
+                top = np.argsort(-np.abs(rel))[:5]                          # entries have different units (pu, %, MW)
+                L.append("     largest entries of that noise (relative to each entry's scale): " +
+                         ", ".join(f"{self.names[k]} {eta[k]:+.3g} ({100 * rel[k]:+.2f}%)" for k in top if eta[k] != 0))
         if self.groups:
             L.append("  per observation group (only that group noisy), same action:")
             for g, rg in self.groups.items():
-                cert = f">= {pct(rg.certified)}" + (" (whole range)" if rg.certified >= rg.eps_max else "")
+                cert = guar(rg, prefix=">= ")
                 fal = (f"breaks at {pct(rg.falsified)}" if np.isfinite(rg.falsified) else "no break found")
                 L.append(f"     {g:<16} guaranteed {cert:<24} {fal}")
         if self.levels:
@@ -509,7 +515,7 @@ class RLAuditor:
         nominal = self.label(r_same.nominal) if r_same.nominal is not None else "ambiguous"
         exact = [nm for nm, s in zip(names, sel) if not s]
         setup = dict(n_noisy=int(sel.sum()), n_obs=n, relative=bool(relative) if isinstance(relative, bool) else False,
-                     exact=(", ".join(sorted({e.split('[')[0] for e in exact})) or "none"), label=self.label)
+                     exact=(", ".join(sorted({e.split('[')[0] for e in exact})) or "none"), label=self.label, scale=sc)
         return NoiseReport(nominal, r_same, r_safe, grp, lv, setup, names, time.time() - t0)
 
     def _noisy_mask(self, noisy, names):

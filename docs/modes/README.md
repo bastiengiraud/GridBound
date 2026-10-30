@@ -74,7 +74,9 @@ If a VecNormalize wrapper normalises the observation, add
 - loads are constant power;
 - gens are ideal PV units;
 - one `ext_grid` is the slack;
-- switches keep their state;
+- switches keep their state. If a switching action or an outage cuts off a bus that carries nothing (pandapower's
+  empty bus behind an open line switch), that bus is dropped, as pandapower does. A cut-off part with loads or
+  generation counts as a violation (loss of supply);
 - the guarantees concern the steady-state AC power flow, not dynamics.
 
 pandapower ≥ 3 ignores tap positions unless `tap_changer_type` is set; the model warns about this.

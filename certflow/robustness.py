@@ -40,6 +40,7 @@ class RadiusResult:
     history: list = field(default_factory=list)    # (eps, certified?, actions) evaluated during the bisection
     nominal: int = None              # the noise-free action (None if the noise-free observation set is ambiguous)
     eps_max: float = np.inf          # largest noise level tried
+    holds_at_zero: bool = True       # False: the requirement is not proven even without noise (certified = 0 is vacuous)
 
     @property
     def bracket(self):
@@ -123,7 +124,11 @@ def bisect_radius(certify, eps_max, tol=1e-3, falsify=None):
     ok, info = certify(eps_max)
     hist.append((eps_max, ok, info))
     res = RadiusResult(eps_max if ok else 0.0, np.inf, None, hist, eps_max=eps_max)
-    if not ok:
+    if not ok:                                     # the bisection assumes the requirement holds at 0: check it
+        ok0, info0 = certify(0.0)
+        hist.append((0.0, ok0, info0))
+        res.holds_at_zero = bool(ok0)
+    if not ok and res.holds_at_zero:
         lo, hi = 0.0, eps_max
         while hi - lo > tol:
             mid = 0.5 * (lo + hi)
@@ -179,7 +184,7 @@ def robustness_radius(policy, obs_tm, scale, mask=None, require="same", eps_max=
     if a0 is not None and bad_action is not None and bad_action(a0):     # already broken without any noise
         ok, info = certify(0.0)
         res = RadiusResult(0.0, 0.0, dict(eps=0.0, action=a0, eta=np.zeros_like(o)), [(0.0, ok, info)],
-                           eps_max=eps_max)
+                           eps_max=eps_max, holds_at_zero=False)
     else:
         res = bisect_radius(certify, eps_max, tol, falsify)
     res.nominal = a0

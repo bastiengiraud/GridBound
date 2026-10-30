@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from ..split import ObjectPool, bisect
-from .constraints import RowBlock, _fin
+from .constraints import RowBlock
 from .sensitivity import linearize
 
 

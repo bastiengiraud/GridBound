@@ -27,7 +27,8 @@ Every noisy entry gets its own bounded noise term, |noise_i| ≤ ε·|value_i|, 
 - **Found level:** the smallest ε at which an attack finds a concrete noise vector that breaks the requirement. For
   "safe action", the action it causes must really violate a limit (checked with a plain power flow).
 
-The true value lies between the two numbers.
+The true value lies between the two numbers. If the requirement cannot be proven even without noise (the agent's
+decision is already ambiguous, or its action already unsafe), the report says so instead of claiming 0 %.
 
 ## Example: the feeder snapshot
 

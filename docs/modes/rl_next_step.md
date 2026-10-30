@@ -17,7 +17,7 @@ rep.plot("next_step.png")                           # 2D map of the load set (ne
 | `next_load="same"` (default) | the action takes effect at any load in the same box |
 | `next_load="step", step_change=0.01` | or at the observed load ±1 % (tighter, slower) |
 | `refine="single"` | split until each box has one action (default `"safe"`: until every action is proven safe) |
-| `Limits(n1=True)` | also check every line outage |
+| `Limits(n1=True)` | also check every line outage; an outage that cuts off loads counts as a violation |
 
 **Use few load directions.** Splitting works well in a few dimensions. With one direction per load the proof
 still holds, but the certified action set gets larger than what the agent really does. The report shows how many of
@@ -41,7 +41,10 @@ observes is computed **as a function of those same symbols**:
 
 - **Loads:** an affine function of e (`load_p`, `load_q`).
 - **Grid quantities:** voltages, loadings, flows and the slack exchange come from the certified power flow, as
-  degree-2 polynomials in e plus a tiny remainder. The remainder is the only part not tied to e (about 1e-5 pu here).
+  degree-2 polynomials in e plus parts not tied to e: an interval remainder and, for the loadings, a few extra
+  relaxation symbols from the square root (one at ±10% load, four at ±20% on the feeder). For voltages these parts
+  are tiny (below 1e-5 pu); for loadings they are not: 0.15–0.79 percentage points at ±10%, i.e. 5–14% of each
+  loading's range. Correlations between loadings and the other entries are therefore looser than between voltages.
 - **Discrete state:** setpoints, taps and switch states are constants.
 
 So the agent receives the **image of the load box** under the power flow, not a box per observation entry. The
