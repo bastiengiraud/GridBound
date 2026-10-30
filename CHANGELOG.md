@@ -6,7 +6,7 @@
 
 You describe the grid, the controller and the limits in pandapower terms. Every report ends in **SAFE** (proven),
 **UNSAFE** (with a concrete counterexample) or **NOT PROVEN**, and includes a Monte-Carlo cross-check. See
-[docs/user_guide.md](docs/user_guide.md).
+[docs/modes/](docs/modes/README.md).
 
 **`GridModel`: a certified model of a pandapower grid as an RL agent sees and changes it**
 - Observation blocks (`obs.*`):

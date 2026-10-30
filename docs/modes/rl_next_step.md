@@ -1,69 +1,42 @@
 # RL mode 1: next-step safety
 
-**Question:** the agent sees the grid at some load inside a box around the current operating point. Which actions
-can it take there, and does each of them keep every limit one step later, for every next load?
+**Question:** the agent sees the grid at any load in a box around the current operating point. Which actions can it
+take, and does each keep every limit one step later, for every next load?
 
-## API
+## Usage
 
 ```python
-from certflow.audit import GridModel, Limits, LoadUncertainty, RLAuditor, act, obs
-
-model = GridModel(net,
-                  observation=[obs.bus_vm(), obs.line_loading(), obs.trafo_loading(), obs.load_p(),
-                               obs.sgen_q(), obs.trafo_tap()],
-                  actions=[act.idle(), act.shift_tap(0, +1), act.shift_tap(0, -1),
-                           act.set_sgen(1, q_mvar=-1.0), act.set_sgen(1, q_mvar=0.0)],
-                  limits=Limits(vm_pu=(0.95, 1.05), max_loading_percent=100))
-model.check_against_pandapower()                 # once: the model must read the grid like the agent's env
-auditor = RLAuditor(policy, model)               # torch module, SB3 model or certflow Sequential
-
-rep = auditor.next_step(net, load_width=0.05)    # each load within +-5 % of the snapshot
-rep = auditor.next_step(net, uncertainty=LoadUncertainty(rel=0.35, directions=D))   # low-rank load set
+rep = auditor.next_step(net, load_width=0.05)       # each load within +-5 % of the snapshot `net`
 print(rep.summary())
-rep.plot("next_step.png")                        # 2D map of the load set (two directions)
+rep.plot("next_step.png")                           # 2D map of the load set (needs >= 1 load direction)
 ```
 
 | Option | Meaning |
 |---|---|
-| `next_load="same"` (default) | the action is applied at any load in the same box |
-| `next_load="step", step_change=0.01` | the next load is the observed one ±1 %; tighter, more symbols |
-| `refine="safe"` / `"single"` | split until every reachable action is proven safe / until each box has one action |
-| `max_depth` | the number of bisections allowed |
-| `Limits(n1=True)` | also screen every line outage |
-| `ActionSpace(actions, masked=True)` | the agent masks invalid actions (MaskablePPO) |
-| `ActionSpace.multi([...])` | one categorical output per device (MultiDiscrete) |
+| `uncertainty=LoadUncertainty(...)` | the load set: per load (`rel=`), all loads together (`directions="common"`), load modes (a matrix), or principal modes from data (`LoadUncertainty.from_samples`) |
+| `next_load="same"` (default) | the action takes effect at any load in the same box |
+| `next_load="step", step_change=0.01` | or at the observed load ±1 % (tighter, slower) |
+| `refine="single"` | split until each box has one action (default `"safe"`: until every action is proven safe) |
+| `Limits(n1=True)` | also check every line outage |
+
+**Use few load directions.** Splitting works well in a few dimensions. With one direction per load the proof
+still holds, but the certified action set gets larger than what the agent really does. The report shows how many of
+the certified actions the agent actually took in random samples; a big gap means the set is too high-dimensional.
 
 ## How it works
 
-1. **Snapshot:** the setpoints, taps and switch states of `net` form the discrete state. The loads around it form
-   the input set, either per load (one symbol each) or low-rank (`directions="common"`, a mode matrix, or
-   `LoadUncertainty.from_samples`).
-2. **Pre-action grid:** Krawczyk certifies the power flow over the box. The agent's observation vector is built
-   block by block as a Taylor model in the load symbols, so every block is consistent with the same loads.
-   - Lines that end at an open switch are handled exactly. Their current is an exact function of the voltage at
-     the closed end.
-3. **Agent:** the observation is pushed through the network, and the masked argmax gives the certified set of
-   actions it can take on the box.
-4. **Post-action grid:** for every reachable action, the grid after the action is certified over the next-load
-   set. Then:
-   - |V| at every bus, line and transformer loading and the ext_grid exchange are bounded on both sides;
-   - boxes where a quantity straddles its limit are bisected further to tighten the bounds;
-   - with N-1 enabled, the same is done after every line outage.
-5. **Partition:** boxes are bisected where several actions compete or an action cannot be proven safe. Splitting
-   stops early when the check cannot depend on the box.
-6. **Counterexample search:** for every action not proven safe, the auditor looks for a load where the deployed
-   agent really takes it, then for a next load where a limit is really violated. It does so along the linear
-   coefficients of the violating quantity and at random vertices. A hit makes the verdict UNSAFE.
-7. **Monte-Carlo check:**
-   - every sampled action must lie in the certified set of its box;
-   - the post-action state must lie inside the certified bounds;
-   - the report lists which actions the samples actually hit. If far fewer are hit than certified, the bounds
-     are loose.
+1. **Pre-action grid:** Krawczyk certifies the power flow over the load box, and the observation vector is built from
+   it. Every entry stays a function of the same loads.
+2. **Agent:** the observation is pushed through the network, and the masked argmax gives every action it can take.
+3. **Post-action grid:** each of those actions is certified over the next-load set. Every bus voltage, branch loading
+   and the slack exchange are bounded, then checked against the limits.
+4. **Splitting:** the box is split where several actions compete or an action cannot be proven safe.
+5. **Checks:** for an action not proven safe, a search looks for a load where the agent really takes it and a limit
+   is really violated. Random samples check the certified sets and bounds.
 
 ## Example: the feeder, two load directions
 
-Here the loads at buses 2–3 move together (direction e0) and the loads at buses 4–5 move together (e1), each by up
-to ±35 %. `refine="single"` splits until each box has one action.
+The loads of buses 2–3 move together (e0), and so do those of buses 4–5 (e1), each by up to ±35 %.
 
 <!-- report:rl_next_step -->
 ```text
@@ -83,23 +56,10 @@ NEXT-STEP SAFETY AUDIT  ->  SAFE
 
 ![next-step audit](../figures/rl_next_step.png)
 
-**Left: which actions the agent can take where.** The partition follows the agent's decision boundary.
+**Left: which action the agent can take where.** The boxes follow the agent's decision boundary.
 - **Low loads (lower left):** voltages rise, and the agent absorbs reactive power at the PV park (green).
 - **Elsewhere:** it idles (blue).
-- **Hatched boxes:** both are possible there.
-- **Dots:** the action the deployed agent took at random loads. Every dot lies inside the certified set of its box.
+- **Hatched boxes:** both actions are possible there.
+- **Dots:** the agent's actual choice at random loads. Every dot lies in its box's certified set.
 
-**Right: safety.** Every action the agent can take, anywhere in the box, keeps every limit for every next load, so
-the verdict is SAFE.
-
-## Scaling and limits
-
-- **Few symbols work best:** box splitting is effective in a few dimensions. With one symbol per load the proof
-  still holds, but it may not separate the agent's decision regions, so the certified action set gets larger than
-  what the agent does. Use low-rank load sets for many loads, as in the paper.
-- **A tight model of the environment matters:** `check_against_pandapower()` should report deviations of about
-  1e-8.
-  - **Taps:** pandapower ≥ 3 ignores taps unless `tap_changer_type` is set; the model warns if a tap action would
-    do nothing.
-  - **Loads** are constant power.
-- **Steady state:** the guarantee covers the steady state after the action, not the transient.
+**Right: safety.** Every action the agent can take, anywhere in the box, keeps every limit for every next load.

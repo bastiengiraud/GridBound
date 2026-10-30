@@ -1,55 +1,43 @@
-# Dispatch NN: an OPF proxy (the paper's use case)
+# Dispatch NN (an OPF proxy)
 
-**Question:** a network maps loads to generator setpoints (Pg, Vg). Does the resulting AC power flow keep every
-operational limit for **every** load in a set? If not, which constant correction of the setpoints makes it
-certifiably safe?
+**Question:** a network maps loads to generator setpoints (Pg, Vg). Does the AC power flow keep every operational
+limit for **every** load in a set? If not, which constant correction of the setpoints makes it safe?
 
-## API
+## Usage
 
 ```python
 from certflow.audit import verify_dispatch
 
-rep = verify_dispatch(net, model, load_width=0.10)                  # pandapower net, MATPOWER case or Grid
-rep = verify_dispatch(net, model, load_width=0.10, restore=True)    # + certified piecewise correction
+rep = verify_dispatch(net, model, load_width=0.10)                # pandapower net, MATPOWER case or Grid
+rep = verify_dispatch(net, model, load_width=0.10, restore=True)  # + certified setpoint correction
 print(rep.summary())
 rep.plot("dispatch.png")
 ```
 
-The network's layout is declared, not assumed. The declarations become exact Linear layers around the network, so
-the certified object is exactly the trained network.
+Declare your network's layout instead of reshaping the network:
 
 | Argument | Values |
 |---|---|
 | `inputs` | `"pd_qd"` (default), `"pd"`, or indices into `[Pd; Qd]` |
-| `input_units` | `"MW"` or `"pu"` |
-| `outputs` | `("pg", "vg")`, `("vg", "pg")`, `("pg",)` (Vg held at setpoint) or `("vg",)` |
-| `pg_units` | `"MW"` or `"pu"` |
-| `pg_gens` | which generators' Pg the network outputs (the others keep their setpoint) |
+| `input_units`, `pg_units` | `"MW"` or `"pu"` |
+| `outputs` | `("pg", "vg")` (default), `("vg", "pg")`, `("pg",)` or `("vg",)`; a missing block stays at its setpoint |
+| `pg_gens` | which generators' Pg the network outputs |
 | `vg_clip` | the deployed Vg saturation, if any |
-| `load_set` | any `AffineSet` over `[Pd; Qd]`, e.g. `certflow.sets.low_rank_load_set` (paper eq. 19); default: each load ±`load_width` |
-| `vm_pu`, `constraints` | the limits; the default set is \|V\|, Pg, Qg, slack P/Q, branch current and angle difference, with zero tolerance |
+| `load_set` | any `AffineSet` over `[Pd; Qd]`, e.g. `certflow.sets.low_rank_load_set`; default: each load ±`load_width` |
+| `vm_pu`, `constraints` | the limits; default: \|V\|, Pg, Qg, slack P/Q, branch current, angle difference |
 
 ## How it works
 
-1. The load set is pushed through the network: the setpoints become a Taylor model in the load symbols.
-2. The specified injections (generation minus load) and the PV voltage setpoints become Taylor models.
-3. Krawczyk proves that the power flow has a unique solution for every load in the set and encloses the state.
-4. Every constraint is bounded on that enclosure:
-   - **|V|**: correlated |V|² at PQ buses, the clipped setpoint at PV buses;
-   - **generator Q and slack P/Q**: injection plus bus load;
-   - **branch current**: a complex-zonotope bound;
-   - **angle difference**.
-5. **Splitting:** where the proof fails (ρ ≥ 1), the box is split along the directions with the largest residual.
-   The certificate is the union over all boxes.
-6. **Restoration** (`restore=True): a QP finds a constant offset (dPg, dVg) that moves every certified band inside
-   its limits. The offset is re-certified, and the box is split when one offset is not enough.
+1. The load set is pushed through the network: the setpoints are now known as functions of the loads.
+2. Krawczyk proves that the power flow has a unique solution for every load and encloses the grid state.
+3. Every limited quantity is bounded on that enclosure. Where the proof fails, the load set is split and each part is
+   certified on its own.
+4. With `restore=True`, a QP finds a constant setpoint offset that moves every bound inside its limit, and the
+   offset is re-certified. The set is split when one offset is not enough.
 
-API used: `PFVerifier.certify` and `Restorer.restore_split` (see [method.md](../method.md) for the mathematics).
+## Example: case9 with tight reactive limits
 
-## Example: case9, tight reactive limits
-
-The network takes the active loads in pu and outputs [Vg; Pg] with Pg in pu. The loads vary by ±10 % each. The
-two PV generators have tight reactive limits (Qmax = 8 and −2 MVAr).
+The loads vary by ±10 % each. Both PV generators have tight reactive limits (Qmax = 8 and −2 MVAr).
 
 <!-- report:dispatch -->
 ```text
@@ -72,18 +60,14 @@ DISPATCH CONTROLLER AUDIT  ->  UNSAFE
 
 How to read it:
 
-- **Blue:** the certified range over the whole load set.
-- **Black:** the range the sampled loads actually reach.
+- **Blue:** the certified range.
+- **Black:** the range the sampled loads reach.
 - **Red:** the limits.
-- **Green:** the certified range after restoration.
+- **Green:** the certified range after the correction.
 
-Generator 1's Q can exceed its 8 MVAr limit. A sample confirms it, so the verdict is UNSAFE. One constant correction
-(a slight reduction of both Vg) makes the whole load set certifiably safe.
+Generator 1's Q can exceed its 8 MVAr limit, and a sample confirms it: the verdict is UNSAFE. A slight reduction of
+both Vg makes the whole load set certifiably safe.
 
-For branch loading, only the upper bound is certified, so the blue bar starts at 0.
+For branch loading, only the upper bound is certified.
 
-## Limits of the guarantee
-
-- **Steady state only:** the AC power flow, with no dynamics.
-- **The given load set:** loads outside it are not covered.
-- **Restoration** is a certified fix for the boxes it reports SAFE. It is not a retraining of the network.
+**Not covered:** dynamics (steady-state AC power flow only), and loads outside the set.

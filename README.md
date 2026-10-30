@@ -2,11 +2,8 @@
 
 **`certflow`: an independent safety auditor for learned power-grid controllers.**
 
-Grid operators increasingly receive controllers that were trained rather than designed: neural-network dispatch
-surrogates, reinforcement-learning agents and similar. certflow checks such a controller **as it is**, whatever its
-training data, loss or reward, against the limits of the grid it will operate. The result is a mathematical
-certificate, not a statistical estimate. It holds for every operating condition in a given set, with
-floating-point rounding included.
+The result is a mathematical certificate, not a statistical estimate. It holds for every operating condition 
+in a given set, with floating-point rounding included.
 
 What it can audit:
 
@@ -22,57 +19,14 @@ What it can audit:
 
 Every case study also runs an independent Monte-Carlo check of the certified claims.
 
-The method builds on *Verified Safety Layers for AC Surrogates: Reachability-Based Local Verification and Safety
-Restoration* (Giraud, Vorwerk, Chatzivasileiadis). The RL case study audits the agent of
-[*Multi-Objective Deep Reinforcement Learning for Secure and Stable Power System
+The RL case study audits the agent of [*Multi-Objective Deep Reinforcement Learning for Secure and Stable Power System
 Operation*](https://arxiv.org/abs/2608.20914) (Papadopoulos, Tsaousoglou, Vorwerk).
 
-## Contents
-
-```
-certflow/                         core: knows nothing about power systems
-├── fp.py          rigorous floating-point error bounds (gamma_n, outward rounding)
-├── tm.py          degree-2 Taylor models / affine zonotopes  (TM = (c0, C, Q, R))
-├── nn/            NN reachability, architecture-agnostic
-│   ├── network.py   NNReachable interface: reach(TM) -> TM, forward(x); Sequential; from_torch, from_state_dict, sb3_actor
-│   ├── layers.py    abstract transformers: Linear, ReLU, Tanh, Sigmoid, MinMaxNormalize/Denormalize
-│   └── argmax.py    discrete outputs: which actions can win over an input set (masked argmax)
-├── krawczyk.py    validated Krawczyk existence/uniqueness for F(z, e) = S(e), Jacobian affine in z
-├── robustness.py  robustness radius to observation noise: certified (bisection) + falsified (attack)
-├── policy.py      DiscretePolicyVerifier (reachable actions -> per-action checks, adaptive partition);
-│                  MultiStepVerifier (k-step reachability tree)
-├── sets.py        input zonotopes x = c + G e and e-space sub-boxes
-└── split.py       adaptive splitting + process pool (Windows-safe)
-certflow/audit/                   user-facing layer (pandapower terms): GridModel (obs / act / Limits / LoadUncertainty),
-                                  RLAuditor (next_step, noise_robustness, multi_step + 3D plot), verify_dispatch
-certflow/power/                   application layer: AC power flow
-├── grid.py        Grid (topology-switchable Ybus), from_pandapower, from_matpower
-├── pf.py          point Newton PF + rectangular PF as a Krawczyk system (RectPFSystem, uncertain Shunt)
-├── pfcert.py      enclose_pf: certified PF for uncertain specs / shunt admittances
-├── quantities.py  observables on a certified state: |V|, injections, branch P/Q/|S|/|I|, admittance-load power
-├── contingency.py n1_analysis: certified N-1 screening over a box (two-sided loadings, |V|, slack; islanding)
-├── controller.py  DispatchController: NN -> [Pg; Vg] (+ offset, Vg saturation)
-├── constraints.py pluggable constraints: V, Pg, Qg, slack, branch |I|², angle difference
-├── verifier.py    PFVerifier: certified pipeline + rho-driven splitting -> Certificate
-├── sensitivity.py control sensitivities (implicit function theorem)
-├── restore.py     restoration: min-norm QP / trust-region SLP / box splitting
-├── validate.py    Monte-Carlo validation of a certificate
-└── cases.py       MATPOWER case9
-examples/          WSCC-9 MaskablePPO case studies (wscc9_env.py, wscc9_actor_reachability.py) + reference outputs
-wscc9_maskableppo_policy_extraction/   the trained agent: actor weights (.npz), the SB3 'data' file, the grid (WSCC_9_bus.raw)
-tests/             soundness-by-sampling and end-to-end tests
-docs/              how the method works (with links into the code) and one document per audit mode
-shell/scripts/     LSF job scripts (setup, tests, case studies); logs go to shell/outputs/
-```
 
 ## Documentation
 
-- [docs/modes/](docs/modes/README.md): **start here**: every mode (dispatch NN, RL next-step, RL noise, RL multi-step) with its API, how it works, rendered results and figures
-- [docs/user_guide.md](docs/user_guide.md): the `certflow.audit` API in one page (observation blocks, actions, options)
-- [docs/README.md](docs/README.md): overview of the three audit modes and the notation
-- [docs/method.md](docs/method.md): the verification method step by step, with the function that implements each step
-- [docs/rl_reachability.md](docs/rl_reachability.md): auditing an RL agent over load uncertainty (one step, N-1, multi-step)
-- [docs/measurement_noise.md](docs/measurement_noise.md): auditing an agent's robustness to measurement noise
+- [docs/modes/](docs/modes/README.md): **start here**: how to set up an audit, and one page per mode (dispatch NN, RL next-step, RL noise, RL multi-step) with usage, results and figures
+- [docs/method.md](docs/method.md): how the proofs work, for readers who want the mathematics
 
 ## Install
 
@@ -89,7 +43,7 @@ pip install -e ".[all]"       # + pandapower, torch (only for from_pandapower / 
 ## Quick start: `certflow.audit`
 
 Describe the grid, the controller and the limits in pandapower terms. Every result is SAFE (proven), UNSAFE (with a
-concrete counterexample) or NOT PROVEN. One page per mode, with rendered results and figures: [docs/modes/](docs/modes/README.md); the API in one page: [docs/user_guide.md](docs/user_guide.md).
+concrete counterexample) or NOT PROVEN. Setup and one page per mode, with results and figures: [docs/modes/](docs/modes/README.md).
 
 ```python
 from certflow.audit import GridModel, Limits, RLAuditor, act, obs, verify_dispatch
@@ -179,54 +133,13 @@ python examples/wscc9_actor_reachability.py --study two-step --track both --step
 observed quantities are power-flow outputs. The model reproduces the observation stored with the trained agent to
 float32 precision. The generic parts (`enclose_pf`, `Shunt`, `quantities`, `n1_analysis`, `DiscretePolicyVerifier`,
 `MultiStepVerifier`, `robustness_radius`) apply to other grids and agents. Only the observation layout, the action
-effects and the mask are specific to this example. The full step-by-step explanation is in
-[docs/rl_reachability.md](docs/rl_reachability.md) and [docs/measurement_noise.md](docs/measurement_noise.md).
+effects and the mask are specific to this example.
 
-Not covered yet: dynamic stability (damping).
 
-## Running on an LSF cluster
-
-All scripts are submitted **from the repository root**; logs are written to `shell/outputs/`.
-
-```bash
-bash shell/scripts/setup_env.sh                    # once, on a login node: .venv with certflow (editable)
-bsub < shell/scripts/run_tests.sh                  # test suite
-bsub < shell/scripts/wscc9_rl_case_studies.sh      # all case studies in one serial job
-bsub < shell/scripts/wscc9_rl_array.sh             # the same as a 14-element job array, in parallel
-ARGS="--require-n1" bsub < shell/scripts/wscc9_rl_array.sh       # extra options for every element
-bstat / bjobs                                      # monitor
-```
-
-`shell/scripts/common.sh` loads the Python module (`PY_MODULE`, default `python3/3.11.9`; see
-`module avail python3`), activates `.venv` and pins BLAS threads to the job's slots. Queue, memory and wall-time
-requests are in the `#BSUB` headers of each script.
-
-## Extending
-
-| You want | You write |
-|---|---|
-| a new activation | a `certflow.nn.layers.Layer` subclass with `reach(ZonoState, ctx)` and `forward` |
-| a new architecture | any object implementing `NNReachable.reach(TM) -> TM` (or a `Sequential` of layers) |
-| a new limit family (e.g. transformer loading) | a `Constraint` subclass: `evaluate(leaf) -> Band`, plus `restoration_rows` to take part in restoration |
-| a different controller | an object with `reach(x_tm, offset) -> (y_raw, y)`, `forward(x, offset)`, `ng`, `vg_clip` |
-| another implicit model | an `AffineJacobianSystem` for `certflow.krawczyk.krawczyk` (see `RectPFSystem`) |
-| a topology change | `grid.with_branch_status(status)` (Ybus/Yf/Yt rebuilt from branch primitives) |
-| a policy whose input is a physical state | `observe(lo, hi) -> Observation(tm)` + `check_action(a, lo, hi, obs)` for `DiscretePolicyVerifier` |
-| a nonlinear observable | `tm.compose(x, f, df, d2_range)` (or `tm.sqrt`, `tm.maximum`) on certified TMs |
-| N-1 security | `n1_analysis(grid, spec_fn, lo, hi, outages, rating_mva, vlim=, slack=)` -> `N1Report.count_bounds(kinds=)`, `.secure` |
-| multi-step guarantees | `MultiStepVerifier(policy, problem, transition, propagate, steps=k)` (re-boxing) or `MultiStepVerifier(..., track="history", extend=...)` (new symbols per step) -> tree, `.paths()`, `.safe`, `.stats()` |
-| robustness to measurement noise | `robustness_radius(policy, obs_tm, scale, mask, require="same" or predicate)` -> certified / falsified radius |
-
-## Tests
-
-```bash
-python -m tests.run_tests      # no pytest needed
-pytest                         # same tests with pytest
-```
 
 ## Assumptions
 
-The certificates assume IEEE double-precision arithmetic with round-to-nearest, and math-library functions (`atan2`,
+The certificates assume double-precision arithmetic with round-to-nearest, and math-library functions (`atan2`,
 `tanh`, `cosh`, `exp`) accurate to a few ulp. The deployed network's own arithmetic (e.g. float32) is covered by an
 explicit error term. The guarantees concern the steady-state AC power flow. See
 [docs/method.md](docs/method.md#9-assumptions).
