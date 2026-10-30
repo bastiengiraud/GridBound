@@ -26,8 +26,7 @@ For each operating point (topology, Pg/V setpoints, load deviation delta_c) and 
     python examples/wscc9_actor_reachability.py --require-n1          # count possible N-1 violations as unsafe
     python examples/wscc9_actor_reachability.py --weights my.npz      # other actor weights (SB3 state-dict npz)
 
-Each (study, operating point) pair is independent, so on a cluster they can run as separate jobs
-(see shell/scripts/wscc9_rl_array.sh).
+Each (study, operating point) pair is independent, so they can run as separate jobs in parallel.
 
 N-0 (enforced by default): the post-action PF has a unique solution, no branch is overloaded, |V| in [0.95, 1.05]
 at every bus, slack in [0, 250] MW.

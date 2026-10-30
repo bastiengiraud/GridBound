@@ -13,6 +13,9 @@
 /examples/from_main_py.py
 /tests/regression/
 
+# HPC (LSF) job scripts and their logs: kept locally, not part of the public repository
+/shell/
+
 # RL agent: training scripts, Julia environment, full SB3 checkpoint, notes ...
 /wscc9_maskableppo_policy_extraction/*
 # ... except what the case study needs: the network data, the actor weights and the SB3 'data' file
@@ -23,10 +26,6 @@
 !/wscc9_maskableppo_policy_extraction/original_files/
 /wscc9_maskableppo_policy_extraction/original_files/*
 !/wscc9_maskableppo_policy_extraction/original_files/data
-
-# HPC job logs (keep the folder itself)
-/shell/outputs/*
-!/shell/outputs/.gitkeep
 
 # ---------------------------------------------------------------------------------------------
 # Python / tooling
